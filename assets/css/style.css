@@ -1,0 +1,372 @@
+:root {
+    /* Color Palette - Antigravity Dark */
+    --bg-gradient-start: #0f172a;
+    /* Slate 900 */
+    --bg-gradient-mid: #1e1b4b;
+    /* Indigo 950 */
+    --bg-gradient-end: #020617;
+    /* Slate 950 */
+
+    --glass-bg: rgba(255, 255, 255, 0.03);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
+    --glass-blur: 16px;
+
+    --accent-primary: #6366f1;
+    /* Indigo 500 */
+    --accent-secondary: #ec4899;
+    /* Pink 500 */
+    --accent-glow: rgba(99, 102, 241, 0.5);
+
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+
+    --status-success: #10b981;
+    --status-warning: #f59e0b;
+    --status-critical: #ef4444;
+
+    --font-main: 'Inter', sans-serif;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-main);
+    background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-mid), var(--bg-gradient-end));
+    background-size: 400% 400%;
+    animation: gradientBG 15s ease infinite;
+    color: var(--text-main);
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+@keyframes gradientBG {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+a {
+    text-decoration: none;
+    color: inherit;
+}
+
+ul {
+    list-style: none;
+}
+
+/* Utilities */
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    border-radius: 24px;
+}
+
+.flex-center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.text-gradient {
+    background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Specific Components */
+
+/* Buttons */
+.btn-glow {
+    padding: 12px 24px;
+    border-radius: 50px;
+    background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+    color: white;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 15px var(--accent-glow);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 0.9rem;
+}
+
+.btn-glow:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 25px var(--accent-glow);
+}
+
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+.btn-outline:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+/* Inputs */
+.input-glass {
+    width: 100%;
+    padding: 14px 20px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    color: white;
+    font-size: 1rem;
+    outline: none;
+    transition: 0.3s;
+}
+
+.input-glass:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+}
+
+/* Cards */
+.card {
+    padding: 24px;
+    transition: transform 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+}
+
+/* Toast Notifications */
+.toast {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(15px);
+    border: 1px solid var(--glass-border);
+    color: white;
+    padding: 15px 25px;
+    border-radius: 50px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 1000;
+}
+
+.toast.show {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+.toast-success i {
+    color: var(--status-success);
+}
+
+.toast-error i {
+    color: var(--status-critical);
+}
+
+
+/* Chips */
+.chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-right: 8px;
+}
+
+.chip.success {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--status-success);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.chip.warning {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--status-warning);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.chip.critical {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--status-critical);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* Animation Utils */
+.fade-in {
+    animation: fadeIn 0.5s ease forwards;
+    opacity: 0;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* =========================================
+   RESPONSIVE DESIGN (Mobile & Tablet)
+   ========================================= */
+
+/* Tablet (Portrait) & Small Laptops */
+@media (max-width: 1024px) {
+    .content-wrapper {
+        padding: 80px 20px 20px !important;
+    }
+
+    .card {
+        padding: 20px;
+    }
+}
+
+/* Mobile Devices */
+@media (max-width: 768px) {
+
+    /* Global Adjustments */
+    body {
+        font-size: 15px;
+    }
+
+    h1 {
+        font-size: 1.8rem;
+    }
+
+    h2 {
+        font-size: 1.5rem;
+    }
+
+    h3 {
+        font-size: 1.2rem;
+    }
+
+    /* Layout & Spacing */
+    .content-wrapper {
+        padding: 80px 15px 15px !important;
+        /* reduced padding */
+    }
+
+    /* Flex Containers -> Stack Vertical */
+    .flex-center {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    /* specific overrides for flex-center that shouldn't stack? 
+       Usually login-body needs center, but dashboard might not.
+       Let's use specific helper classes in HTML if needed, 
+       but for now we stack. 
+    */
+
+    /* Dashboard Grid */
+    div[style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+        /* Stack cards */
+    }
+
+    /* Navbar Mobile overrides are in navbar.php style block, 
+       but we can reinforce here if needed. */
+
+    /* Classroom Tab Buttons */
+    .tab-btn {
+        padding: 10px 15px;
+        font-size: 0.9rem;
+    }
+
+    div[style*="display: flex; gap: 10px;"] {
+        flex-wrap: wrap;
+        /* Allow tabs/buttons to wrap */
+    }
+
+    /* Glass Panels */
+    .glass-panel {
+        padding: 15px !important;
+        border-radius: 16px;
+    }
+
+    /* Forms */
+    .input-glass {
+        padding: 12px 15px;
+    }
+
+    /* Tables (Submissions) */
+    table,
+    thead,
+    tbody,
+    th,
+    td,
+    tr {
+        display: block;
+    }
+
+    thead tr {
+        position: absolute;
+        top: -9999px;
+        left: -9999px;
+    }
+
+    tr {
+        border: 1px solid var(--glass-border);
+        margin-bottom: 10px;
+        border-radius: 10px;
+        padding: 10px;
+    }
+
+    td {
+        border: none;
+        position: relative;
+        padding-left: 50%;
+        text-align: right;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    td:before {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        width: 45%;
+        padding-right: 10px;
+        white-space: nowrap;
+        text-align: left;
+        font-weight: bold;
+        color: var(--text-muted);
+    }
+
+    /* Camera Feed */
+    #camera-container {
+        height: 250px !important;
+    }
+
+    video {
+        object-fit: cover;
+    }
+}
