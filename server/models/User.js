@@ -27,6 +27,10 @@ const UserSchema = new mongoose.Schema({
         type: [Number], // Array of 128 floats
         default: null
     },
+    googleId: {
+        type: String,
+        default: null
+    },
     isFaceRegistered: {
         type: Boolean,
         default: false

@@ -80,4 +80,49 @@ router.get('/me', async (req, res) => {
     }
 });
 
+// Google Login
+const { OAuth2Client } = require('google-auth-library');
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+router.post('/google', async (req, res) => {
+    const { token } = req.body;
+    try {
+        const ticket = await client.verifyIdToken({
+            idToken: token,
+            audience: process.env.GOOGLE_CLIENT_ID
+        });
+        const { name, email, sub } = ticket.getPayload(); // sub is googleId
+
+        let user = await User.findOne({ email });
+
+        if (user) {
+            // Link Google ID if not linked
+            if (!user.googleId) {
+                user.googleId = sub;
+                await user.save();
+            }
+        } else {
+            // Create new Google user
+            user = new User({
+                name,
+                email,
+                password: 'google_login_no_password', // Dummy password
+                googleId: sub,
+                role: 'student' // Default role
+            });
+            await user.save();
+        }
+
+        const payload = { user: { id: user.id, role: user.role } };
+        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' }, (err, jwtToken) => {
+            if (err) throw err;
+            res.json({ token: jwtToken, user: { id: user.id, name: user.name, role: user.role } });
+        });
+
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Google Auth Failed');
+    }
+});
+
 module.exports = router;
