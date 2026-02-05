@@ -21,7 +21,9 @@ const Login = () => {
             }
             navigate('/dashboard');
         } catch (err) {
-            alert('Error: ' + (err.response?.data?.msg || 'Something went wrong'));
+            console.error("Full Login Error:", err);
+            const errorMsg = err.response?.data?.msg || err.message || 'Unknown Error';
+            alert('Login Failed: ' + errorMsg);
         }
     };
 
