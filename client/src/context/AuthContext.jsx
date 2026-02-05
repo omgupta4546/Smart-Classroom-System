@@ -14,6 +14,9 @@ export const AuthProvider = ({ children }) => {
         headers: { 'Content-Type': 'application/json' }
     });
 
+    console.log("Current API Base URL:", api.defaults.baseURL); // DEBUG LOG
+
+
     useEffect(() => {
         const loadUser = async () => {
             const token = localStorage.getItem('token');
