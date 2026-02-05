@@ -10,7 +10,7 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     const api = axios.create({
-        baseURL: 'http://localhost:5000/api', // Update for Prod
+        baseURL: 'https://attendance-backend-0gny.onrender.com/api', // Production Backend
         headers: { 'Content-Type': 'application/json' }
     });
 
