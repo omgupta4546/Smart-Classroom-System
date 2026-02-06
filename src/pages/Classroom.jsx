@@ -10,7 +10,7 @@ import {
     ChevronRight,
     MoreVertical,
     User as UserIcon,
-    ChalkboardTeacher
+    Presentation
 } from 'lucide-react';
 
 const Classroom = () => {
@@ -87,7 +87,7 @@ const Classroom = () => {
                         <div className="chip warning" style={{ marginBottom: '10px' }}>#{classData?.code}</div>
                         <h1 style={{ fontSize: 'clamp(1.8rem, 5vw, 3rem)', fontWeight: '800' }}>{classData?.name}</h1>
                         <p className="text-muted" style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <ChalkboardTeacher size={20} />
+                            <Presentation size={20} />
                             Prof. {classData?.professorName || 'Dr. Pankaj Sharma'}
                         </p>
                     </div>
