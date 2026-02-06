@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const Class = require('../models/Class');
-const User = require('../models/User');
-const Attendance = require('../models/Attendance');
+const Class = require('../models/Class.cjs');
+const User = require('../models/User.cjs');
+const Attendance = require('../models/Attendance.cjs');
 const jwt = require('jsonwebtoken');
 
 // Middleware to check token
@@ -117,6 +117,21 @@ router.post('/mark', auth, async (req, res) => {
 
         await attendance.save();
         res.json({ msg: 'Attendance marked' });
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
+// Get Attendance History
+router.get('/:classCode/attendance', auth, async (req, res) => {
+    try {
+        const classroom = await Class.findOne({ code: req.params.classCode });
+        if (!classroom) return res.status(404).json({ msg: 'Class not found' });
+
+        const history = await Attendance.find({ classId: classroom._id })
+            .populate('records.student', 'name email rollNo')
+            .sort({ date: -1 });
+        res.json(history);
     } catch (err) {
         res.status(500).send('Server Error');
     }

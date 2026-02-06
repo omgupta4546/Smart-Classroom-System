@@ -2,6 +2,17 @@ import { useState, useRef, useEffect } from 'react';
 import * as faceapi from 'face-api.js';
 import { useAuth } from '../context/AuthContext';
 import { useParams, useNavigate } from 'react-router-dom';
+import {
+    Camera,
+    Image as ImageIcon,
+    X,
+    Plus,
+    Search,
+    CheckCircle,
+    Pause,
+    Play,
+    Save
+} from 'lucide-react';
 
 const Attendance = () => {
     const { classCode } = useParams();
@@ -177,7 +188,7 @@ const Attendance = () => {
                                 <img src={imagePreview} alt="Class" style={{ width: '100%', maxHeight: '400px', objectFit: 'contain', borderRadius: '15px' }} />
                             ) : (
                                 <div style={{ padding: '50px' }}>
-                                    <i className="fas fa-image" style={{ fontSize: '3rem', marginBottom: '10px', color: 'var(--text-muted)' }}></i>
+                                    <ImageIcon size={48} style={{ marginBottom: '10px', color: 'var(--text-muted)' }} />
                                     <p>Upload a group photo of the class</p>
                                 </div>
                             )}
@@ -188,7 +199,9 @@ const Attendance = () => {
 
                 {/* Right Panel: List & Manual */}
                 <div className="glass-panel" style={{ flex: 1, padding: '20px', minWidth: '300px' }}>
-                    <h3>Present: {present.size}</h3>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <CheckCircle size={20} color="var(--status-success)" /> Present: {present.size}
+                    </h3>
 
                     <div style={{ maxHeight: '200px', overflowY: 'auto', margin: '15px 0', borderBottom: '1px solid var(--glass-border)', paddingBottom: '10px' }}>
                         {Array.from(present).map(id => {
@@ -196,13 +209,15 @@ const Attendance = () => {
                             return (
                                 <div key={id} className="chip success" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', width: '100%' }}>
                                     <span>{s?.name || id}</span>
-                                    <i className="fas fa-times" style={{ cursor: 'pointer' }} onClick={() => toggleStudent(id)}></i>
+                                    <X size={14} style={{ cursor: 'pointer' }} onClick={() => toggleStudent(id)} />
                                 </div>
                             )
                         })}
                     </div>
 
-                    <h4>Manual Override</h4>
+                    <h4 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <Search size={16} /> Manual Override
+                    </h4>
                     <input
                         type="text"
                         placeholder="Search missing student..."
@@ -215,7 +230,7 @@ const Attendance = () => {
                         {absentStudents.map(s => (
                             <div key={s._id} onClick={() => toggleStudent(s._id)} style={{ padding: '8px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between' }}>
                                 <span>{s.name}</span>
-                                <i className="fas fa-plus text-gradient"></i>
+                                <Plus size={14} className="text-gradient" />
                             </div>
                         ))}
                     </div>
@@ -225,12 +240,18 @@ const Attendance = () => {
             <div style={{ display: 'flex', gap: '20px' }}>
                 {mode === 'camera' && (
                     !isScanning ? (
-                        <button onClick={() => setIsScanning(true)} className="btn-glow">Start Scanning</button>
+                        <button onClick={() => setIsScanning(true)} className="btn-glow" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Play size={16} /> Start Scanning
+                        </button>
                     ) : (
-                        <button onClick={() => setIsScanning(false)} className="btn-outline">Pause</button>
+                        <button onClick={() => setIsScanning(false)} className="btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Pause size={16} /> Pause
+                        </button>
                     )
                 )}
-                <button onClick={saveAttendance} className="btn-glow" style={{ background: 'var(--status-success)' }}>Save Attendance</button>
+                <button onClick={saveAttendance} className="btn-glow" style={{ background: 'var(--status-success)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Save size={16} /> Save Attendance
+                </button>
             </div>
         </div>
     );
