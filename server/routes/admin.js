@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/User.cjs');
-const Class = require('../models/Class.cjs');
-const Attendance = require('../models/Attendance.cjs');
+const User = require('../models/User.js');
+const Class = require('../models/Class.js');
+const Attendance = require('../models/Attendance.js');
 const jwt = require('jsonwebtoken');
 
 // Middleware to check if user is admin

@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const Class = require('../models/Class.cjs');
-const User = require('../models/User.cjs');
-const Attendance = require('../models/Attendance.cjs');
+const Class = require('../models/Class.js');
+const User = require('../models/User.js');
+const Attendance = require('../models/Attendance.js');
 const jwt = require('jsonwebtoken');
 
 // Middleware to check token

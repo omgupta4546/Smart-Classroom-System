@@ -27,9 +27,9 @@ app.get('/', (req, res) => {
 });
 
 // Import Routes
-const authRoutes = require('./routes/auth.cjs');
-const classRoutes = require('./routes/class.cjs');
-const adminRoutes = require('./routes/admin.cjs');
+const authRoutes = require('./routes/auth.js');
+const classRoutes = require('./routes/class.js');
+const adminRoutes = require('./routes/admin.js');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/classes', classRoutes);
