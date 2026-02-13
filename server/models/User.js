@@ -16,8 +16,13 @@ const UserSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['student', 'professor', 'admin'],
+        enum: ['student', 'professor', 'college_admin', 'super_admin'],
         default: 'student'
+    },
+    institutionId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Institution',
+        default: null
     },
     rollNo: {
         type: String,

@@ -5,9 +5,26 @@ import { GoogleLogin } from '@react-oauth/google';
 
 const Login = () => {
     const [isLogin, setIsLogin] = useState(true);
-    const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'student', key: '' });
+    const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'student', key: '', institutionId: '' });
     const { login, register, api } = useAuth();
     const navigate = useNavigate();
+    const [institutions, setInstitutions] = useState([]);
+
+    // Fetch institutions
+    useState(() => {
+        const fetchInstitutions = async () => {
+            try {
+                const res = await api.get('/institutions/all');
+                setInstitutions(res.data);
+                if (res.data.length > 0) {
+                    setFormData(prev => ({ ...prev, institutionId: res.data[0]._id }));
+                }
+            } catch (err) {
+                console.error("Failed to load institutions");
+            }
+        };
+        fetchInstitutions();
+    }, []);
 
     const onChange = e => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -76,6 +93,15 @@ const Login = () => {
                         <select name="role" className="input-glass" onChange={onChange} value={formData.role}>
                             <option value="student" style={{ color: 'black' }}>Student</option>
                             <option value="professor" style={{ color: 'black' }}>Professor</option>
+                        </select>
+                    )}
+
+                    {!isLogin && (
+                        <select name="institutionId" className="input-glass" onChange={onChange} value={formData.institutionId} required>
+                            <option value="" disabled style={{ color: 'black' }}>Select Institution</option>
+                            {institutions.map(inst => (
+                                <option key={inst._id} value={inst._id} style={{ color: 'black' }}>{inst.name} ({inst.code})</option>
+                            ))}
                         </select>
                     )}
 

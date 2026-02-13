@@ -21,26 +21,67 @@ const AdminPanel = () => {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState('users');
+    const [logs, setLogs] = useState([]); // Audit Logs State
+    const { user } = useAuth(); // Get user to check role
+
+    // Super Admin State
+    const [institutions, setInstitutions] = useState([]);
+    const [newInst, setNewInst] = useState({ name: '', code: '', address: '' });
+    const [newAdmin, setNewAdmin] = useState({ name: '', email: '', password: '', institutionId: '' });
 
     useEffect(() => {
         const fetchAdminData = async () => {
+            console.log("Fetching Admin Data...");
             try {
-                const [statsRes, usersRes, classesRes] = await Promise.all([
+                if (user?.role === 'super_admin') {
+                    const instRes = await api.get('/api/institutions/all');
+                    setInstitutions(instRes.data);
+                    // Super admin might want to see global stats or select an institution to view
+                    // For now, let's just fetch global users/classes/stats
+                }
+
+                const [statsRes, usersRes, classesRes, logsRes] = await Promise.all([
                     api.get('/api/admin/stats'),
                     api.get('/api/admin/users'),
-                    api.get('/api/admin/classes')
+                    api.get('/api/admin/classes'),
+                    api.get('/api/logs')
                 ]);
+                console.log("Admin Data Fetched:", { stats: statsRes.data, users: usersRes.data });
                 setStats(statsRes.data);
                 setUsers(usersRes.data);
                 setClasses(classesRes.data);
+                setLogs(logsRes.data);
             } catch (err) {
                 console.error('Failed to fetch admin data', err);
+                alert("Failed to load admin data. Check console for details.");
             } finally {
                 setLoading(false);
             }
         };
         fetchAdminData();
-    }, [api]);
+    }, [api, user]);
+
+    const createInstitution = async (e) => {
+        e.preventDefault();
+        try {
+            await api.post('/api/institutions/create', newInst);
+            alert('Institution Created');
+            window.location.reload();
+        } catch (err) {
+            alert('Failed to create institution');
+        }
+    };
+
+    const createCollegeAdmin = async (e) => {
+        e.preventDefault();
+        try {
+            await api.post('/api/institutions/add-admin', newAdmin);
+            alert('College Admin Created');
+            window.location.reload();
+        } catch (err) {
+            alert('Failed to create admin');
+        }
+    };
 
     const deleteUser = async (id) => {
         if (!window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
@@ -57,7 +98,12 @@ const AdminPanel = () => {
         }
     };
 
-    if (loading) return <div className="flex-center" style={{ height: '80vh' }}><div className="loader"></div></div>;
+    if (loading) return (
+        <div className="flex-center" style={{ height: '80vh', flexDirection: 'column', gap: '20px' }}>
+            <div className="loader"></div>
+            <div style={{ color: 'var(--text-muted)' }}>Loading Admin Panel...</div>
+        </div>
+    );
 
     const filteredUsers = users.filter(u =>
         u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -112,7 +158,7 @@ const AdminPanel = () => {
 
             {/* Main Tabs */}
             <div className="glass-panel" style={{ padding: '5px', borderRadius: '15px', display: 'inline-flex', gap: '5px', marginBottom: '30px' }}>
-                {['users', 'classes', 'analytics'].map(tab => (
+                {['users', 'classes', 'analytics', 'audit', ...(user?.role === 'super_admin' ? ['institutions'] : [])].map(tab => (
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
@@ -239,6 +285,72 @@ const AdminPanel = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px' }}>
                         <AnalyticsCard title="System Growth (New Users)" type="area" />
                         <AnalyticsCard title="Global Attendance Rate" type="line" />
+                    </div>
+                )}
+
+                {activeTab === 'audit' && (
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--accent-secondary)' }}>
+                                    <th style={{ padding: '15px' }}>Action</th>
+                                    <th style={{ padding: '15px' }}>Performed By</th>
+                                    <th style={{ padding: '15px' }}>Target</th>
+                                    <th style={{ padding: '15px' }}>Timestamp</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {logs.map(log => (
+                                    <tr key={log._id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                                        <td style={{ padding: '15px', fontWeight: 'bold', color: 'var(--accent-primary)' }}>{log.action}</td>
+                                        <td style={{ padding: '15px' }}>{log.performedBy?.name || 'Unknown'}</td>
+                                        <td style={{ padding: '15px' }}>{log.target}</td>
+                                        <td style={{ padding: '15px', color: 'var(--text-muted)' }}>{new Date(log.timestamp).toLocaleString()}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                {activeTab === 'institutions' && user?.role === 'super_admin' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+                        <div className="glass-panel card" style={{ padding: '20px' }}>
+                            <h3>Create Institution</h3>
+                            <form onSubmit={createInstitution} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '15px' }}>
+                                <input className="input-glass" placeholder="Name" value={newInst.name} onChange={e => setNewInst({ ...newInst, name: e.target.value })} required />
+                                <input className="input-glass" placeholder="Code (e.g. IITD)" value={newInst.code} onChange={e => setNewInst({ ...newInst, code: e.target.value })} required />
+                                <input className="input-glass" placeholder="Address" value={newInst.address} onChange={e => setNewInst({ ...newInst, address: e.target.value })} />
+                                <button className="btn-glow">Create</button>
+                            </form>
+
+                            <hr style={{ margin: '20px 0', borderColor: 'var(--glass-border)' }} />
+
+                            <h4>Existing Institutions</h4>
+                            <ul style={{ listStyle: 'none', padding: 0, marginTop: '10px', maxHeight: '200px', overflowY: 'auto' }}>
+                                {institutions.map(inst => (
+                                    <li key={inst._id} style={{ padding: '10px', borderBottom: '1px solid var(--glass-border)' }}>
+                                        <strong>{inst.name}</strong> ({inst.code})
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+
+                        <div className="glass-panel card" style={{ padding: '20px' }}>
+                            <h3>Add College Admin</h3>
+                            <form onSubmit={createCollegeAdmin} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '15px' }}>
+                                <select className="input-glass" value={newAdmin.institutionId} onChange={e => setNewAdmin({ ...newAdmin, institutionId: e.target.value })} required>
+                                    <option value="">Select Institution</option>
+                                    {institutions.map(inst => (
+                                        <option key={inst._id} value={inst._id}>{inst.name}</option>
+                                    ))}
+                                </select>
+                                <input className="input-glass" placeholder="Admin Name" value={newAdmin.name} onChange={e => setNewAdmin({ ...newAdmin, name: e.target.value })} required />
+                                <input className="input-glass" type="email" placeholder="Email" value={newAdmin.email} onChange={e => setNewAdmin({ ...newAdmin, email: e.target.value })} required />
+                                <input className="input-glass" type="password" placeholder="Password" value={newAdmin.password} onChange={e => setNewAdmin({ ...newAdmin, password: e.target.value })} required />
+                                <button className="btn-glow">Create Admin</button>
+                            </form>
+                        </div>
                     </div>
                 )}
 

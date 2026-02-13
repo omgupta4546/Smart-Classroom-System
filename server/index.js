@@ -30,11 +30,18 @@ app.get('/', (req, res) => {
 const authRoutes = require('./routes/auth.js');
 const classRoutes = require('./routes/class.js');
 const adminRoutes = require('./routes/admin.js');
+const institutionRoutes = require('./routes/institution.js');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/classes', classRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/institutions', institutionRoutes);
+app.use('/api/logs', require('./routes/logs.js'));
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
+}
+
+module.exports = app;

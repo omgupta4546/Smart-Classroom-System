@@ -8,7 +8,7 @@ const path = require('path');
 
 // Register
 router.post('/register', async (req, res) => {
-    const { name, email, password, role, rollNo, key } = req.body;
+    const { name, email, password, role, rollNo, key, institutionId } = req.body;
 
     // Simple Professor Key Check (Demo)
     if (role === 'professor' && key !== 'admin123') {
@@ -27,15 +27,16 @@ router.post('/register', async (req, res) => {
             email,
             password: hashedPassword,
             role,
-            rollNo
+            rollNo,
+            institutionId: institutionId || null // Link to institution
         });
 
         await user.save();
 
-        const payload = { user: { id: user.id, role: user.role } };
+        const payload = { user: { id: user.id, role: user.role, institutionId: user.institutionId } };
         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' }, (err, token) => {
             if (err) throw err;
-            res.json({ token, user: { id: user.id, name: user.name, role: user.role } });
+            res.json({ token, user: { id: user.id, name: user.name, role: user.role, institutionId: user.institutionId } });
         });
 
     } catch (err) {
@@ -55,10 +56,10 @@ router.post('/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ msg: 'Invalid Credentials' });
 
-        const payload = { user: { id: user.id, role: user.role } };
+        const payload = { user: { id: user.id, role: user.role, institutionId: user.institutionId } };
         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' }, (err, token) => {
             if (err) throw err;
-            res.json({ token, user: { id: user.id, name: user.name, role: user.role } });
+            res.json({ token, user: { id: user.id, name: user.name, role: user.role, institutionId: user.institutionId } });
         });
 
     } catch (err) {

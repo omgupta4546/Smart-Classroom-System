@@ -17,96 +17,42 @@ import {
 const Attendance = () => {
     const { classCode } = useParams();
     const videoRef = useRef();
+    const canvasRef = useRef();
     const [imagePreview, setImagePreview] = useState(null);
     const { api } = useAuth();
 
-    const [students, setStudents] = useState([]);
-    const [present, setPresent] = useState(new Set()); // Set of IDs
-    const [matcher, setMatcher] = useState(null);
+    // ... (rest of state)
 
-    // Modes
-    const [mode, setMode] = useState('camera'); // 'camera' | 'photo'
-    const [isScanning, setIsScanning] = useState(false);
-    const [manualSearch, setManualSearch] = useState('');
-
-    const navigate = useNavigate();
-
-    useEffect(() => {
-        const init = async () => {
-            // Load Models
-            const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
-            await Promise.all([
-                faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-            ]);
-
-            // Load Students for Class
-            const res = await api.get(`/classes/${classCode}/students`);
-
-            // Setup Matcher
-            const loadedStudents = res.data.filter(s => s.isFaceRegistered);
-            if (loadedStudents.length > 0) {
-                const labeledDescriptors = loadedStudents.map(s => {
-                    return new faceapi.LabeledFaceDescriptors(s._id, [new Float32Array(s.faceDescriptor)]);
-                });
-                setMatcher(new faceapi.FaceMatcher(labeledDescriptors, 0.5));
-            }
-
-            setStudents(res.data);
-
-            // Start Camera if in camera mode
-            if (mode === 'camera' && videoRef.current) startCamera();
-        };
-        init();
-    }, [classCode]);
-
-    // Handle Mode Switch
-    useEffect(() => {
-        if (mode === 'camera') {
-            startCamera();
-        } else {
-            stopCamera();
-        }
-    }, [mode]);
-
-    const startCamera = async () => {
-        if (navigator.mediaDevices && videoRef.current) {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
-                videoRef.current.srcObject = stream;
-            } catch (e) {
-                console.error("Camera failed", e);
-            }
-        }
-    };
-
-    const stopCamera = () => {
-        if (videoRef.current && videoRef.current.srcObject) {
-            videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-            videoRef.current.srcObject = null;
-        }
-    };
-
-    // Live AI Loop
+    // Live AI Loop with Drawing
     useEffect(() => {
         let interval;
         if (isScanning && mode === 'camera' && matcher) {
             interval = setInterval(async () => {
-                if (videoRef.current) {
+                if (videoRef.current && canvasRef.current) {
                     const detections = await faceapi.detectAllFaces(videoRef.current, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
                         .withFaceLandmarks()
                         .withFaceDescriptors();
 
-                    const results = detections.map(d => matcher.findBestMatch(d.descriptor));
+                    const displaySize = { width: videoRef.current.videoWidth, height: videoRef.current.videoHeight };
+                    faceapi.matchDimensions(canvasRef.current, displaySize);
 
-                    results.forEach(result => {
+                    const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                    const ctx = canvasRef.current.getContext('2d');
+                    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+
+                    const results = resizedDetections.map(d => matcher.findBestMatch(d.descriptor));
+
+                    results.forEach((result, i) => {
+                        const box = resizedDetections[i].detection.box;
+                        const drawBox = new faceapi.draw.DrawBox(box, { label: result.toString() });
+                        drawBox.draw(canvasRef.current);
+
                         if (result.label !== 'unknown') {
                             setPresent(prev => new Set(prev).add(result.label));
                         }
                     });
                 }
-            }, 500); // 2 FPS
+            }, 100); // 10 FPS
         }
         return () => clearInterval(interval);
     }, [isScanning, matcher, mode]);
@@ -181,7 +127,10 @@ const Attendance = () => {
                 {/* Left Panel: Input Source */}
                 <div className="glass-panel" style={{ flex: 2, padding: '10px', minHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                     {mode === 'camera' ? (
-                        <video ref={videoRef} autoPlay muted style={{ width: '100%', borderRadius: '15px' }} />
+                        <>
+                            <video ref={videoRef} autoPlay muted style={{ width: '100%', borderRadius: '15px' }} />
+                            <canvas ref={canvasRef} style={{ position: 'absolute', top: '10px', left: '10px' }} />
+                        </>
                     ) : (
                         <div style={{ textAlign: 'center', width: '100%' }}>
                             {imagePreview ? (

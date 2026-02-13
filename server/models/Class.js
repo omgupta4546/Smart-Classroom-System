@@ -10,6 +10,11 @@ const ClassSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
+    institutionId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Institution',
+        required: true
+    },
     professor: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
@@ -22,6 +27,10 @@ const ClassSchema = new mongoose.Schema({
     createdAt: {
         type: Date,
         default: Date.now
+    },
+    minAttendance: {
+        type: Number,
+        default: 75
     }
 });
 

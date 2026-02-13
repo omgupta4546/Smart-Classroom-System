@@ -4,6 +4,17 @@ const Class = require('../models/Class.js');
 const User = require('../models/User.js');
 const Attendance = require('../models/Attendance.js');
 const jwt = require('jsonwebtoken');
+const logAction = require('../utils/logger.js');
+const nodemailer = require('nodemailer');
+
+// Email Transporter (Configure with your SMTP)
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER || 'your-email@gmail.com',
+        pass: process.env.EMAIL_PASS || 'your-password'
+    }
+});
 
 // Middleware to check token
 const auth = (req, res, next) => {
@@ -27,9 +38,11 @@ router.post('/create', auth, async (req, res) => {
         let newClass = new Class({
             name,
             code,
-            professor: req.user.id
+            professor: req.user.id,
+            institutionId: req.user.institutionId
         });
         await newClass.save();
+        await logAction('CREATE_CLASS', req.user, newClass.name, { code });
         res.json(newClass);
     } catch (err) {
         res.status(500).send('Server Error: ' + err.message);
@@ -50,6 +63,7 @@ router.post('/join', auth, async (req, res) => {
 
         classroom.students.push(req.user.id);
         await classroom.save();
+        await logAction('JOIN_CLASS', req.user, classroom.name, { code });
         res.json({ msg: 'Class joined' });
     } catch (err) {
         res.status(500).send('Server Error');
@@ -115,7 +129,50 @@ router.post('/mark', auth, async (req, res) => {
             }))
         });
 
+        // 1. Geo-Fencing Check
+        if (req.body.location && classroom.location && classroom.location.lat) {
+            const { lat, long } = req.body.location;
+            const classLat = classroom.location.lat;
+            const classLong = classroom.location.long;
+
+            // Simple Distance Calc (Haversine Formula approximation for short distances)
+            const R = 6371e3; // metres
+            const φ1 = lat * Math.PI / 180; // φ, λ in radians
+            const φ2 = classLat * Math.PI / 180;
+            const Δφ = (classLat - lat) * Math.PI / 180;
+            const Δλ = (classLong - long) * Math.PI / 180;
+
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const d = R * c; // in metres
+
+            if (d > classroom.location.radius) {
+                return res.status(400).json({ msg: `You are ${Math.round(d)}m away. Must be within ${classroom.location.radius}m.` });
+            }
+        }
+
         await attendance.save();
+        await logAction('MARK_ATTENDANCE', req.user, classroom.name, { count: studentsPresent.length });
+
+        // 2. Low Attendance Alerts
+        // Note: In real app, calculate actual percentage. Here we simulate alert for demo.
+        studentsPresent.forEach(async studentId => {
+            // Mock check: 50% chance to trigger alert for demo purposes
+            if (Math.random() < 0.1) {
+                const student = await User.findById(studentId);
+                if (student && student.email) {
+                    transporter.sendMail({
+                        from: 'admin@smartclass.com',
+                        to: student.email,
+                        subject: `Low Attendance Warning: ${classroom.name}`,
+                        text: `Your attendance in ${classroom.name} has dropped below ${classroom.minAttendance}%. Please attend upcoming classes.`
+                    }).catch(err => console.error("Email failed", err));
+                }
+            }
+        });
+
         res.json({ msg: 'Attendance marked' });
     } catch (err) {
         res.status(500).send('Server Error');

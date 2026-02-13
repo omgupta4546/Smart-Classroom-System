@@ -22,6 +22,34 @@ const Classroom = () => {
     const [attendanceHistory, setAttendanceHistory] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    // Geo-Fencing State
+    const [location, setLocation] = useState(null);
+
+    const getLocation = () => {
+        if (!navigator.geolocation) {
+            alert("Geolocation is not supported by your browser");
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                setLocation({
+                    lat: position.coords.latitude,
+                    long: position.coords.longitude
+                });
+                alert("Location acquired!");
+            },
+            () => {
+                alert("Unable to retrieve your location");
+            }
+        );
+    };
+
+    const setClassroomLocation = async () => {
+        if (!location) return alert("Get location first");
+        // API call would go here. For demo, we just alert.
+        alert(`Class location set to: ${location.lat}, ${location.long}`);
+    };
+
     useEffect(() => {
         const loadClassDetails = async () => {
             try {
@@ -55,9 +83,9 @@ const Classroom = () => {
 
         attendanceHistory.forEach(record => {
             const date = new Date(record.date).toLocaleDateString();
-            const id = record._id.substring(record._id.length - 6).toUpperCase();
-            const count = record.records.length;
-            const studentNames = record.records.map(r => r.student?.name).join("; ");
+            const id = record._id ? record._id.substring(record._id.length - 6).toUpperCase() : 'N/A';
+            const count = record.records ? record.records.length : 0;
+            const studentNames = record.records ? record.records.map(r => r.student?.name || 'Unknown').join("; ") : '';
             csvContent += `${date},${id},${count},"${studentNames}"\n`;
         });
 
@@ -216,11 +244,13 @@ const Classroom = () => {
                         <div className="glass-panel" style={{ padding: '30px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
                                 <h2>Attendance Logs</h2>
-                                {user?.role === 'professor' && attendanceHistory.length > 0 && (
-                                    <button onClick={exportToCSV} className="btn-glow btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem' }}>
-                                        <Download size={14} /> EXPORT CSV
-                                    </button>
-                                )}
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    {user?.role === 'professor' && attendanceHistory.length > 0 && (
+                                        <button onClick={exportToCSV} className="btn-glow btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem' }}>
+                                            <Download size={14} /> EXPORT CSV
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
                             {attendanceHistory.length === 0 ? (
