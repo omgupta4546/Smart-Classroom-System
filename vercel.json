@@ -2,7 +2,7 @@
     "rewrites": [
         {
             "source": "/api/(.*)",
-            "destination": "/api/index.js"
+            "destination": "https://smart-classroom-system-n8fb.onrender.com/api/$1"
         },
         {
             "source": "/((?!api/|.*\\..*).*)",
