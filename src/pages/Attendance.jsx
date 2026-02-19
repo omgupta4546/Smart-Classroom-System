@@ -21,7 +21,58 @@ const Attendance = () => {
     const [imagePreview, setImagePreview] = useState(null);
     const { api } = useAuth();
 
-    // ... (rest of state)
+    const [students, setStudents] = useState([]);
+    const [present, setPresent] = useState(new Set());
+    const [isScanning, setIsScanning] = useState(false);
+    const [matcher, setMatcher] = useState(null);
+    const [manualSearch, setManualSearch] = useState('');
+    const [mode, setMode] = useState('camera');
+    const [loading, setLoading] = useState(true);
+    const navigate = useNavigate();
+
+    // 1. Load AI Models
+    useEffect(() => {
+        const loadModels = async () => {
+            try {
+                const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+                await Promise.all([
+                    faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                ]);
+                setLoading(false);
+            } catch (err) {
+                console.error("Failed to load models:", err);
+                alert("Failed to load AI models. Please check your internet connection.");
+            }
+        };
+        loadModels();
+    }, []);
+
+    // 2. Fetch Class Students & Build Matcher
+    useEffect(() => {
+        const fetchStudents = async () => {
+            try {
+                const res = await api.get(`/classes/${classCode}/students`);
+                setStudents(res.data);
+
+                // Create Labeled Descriptors for Face Matcher
+                const labeledDescriptors = res.data
+                    .filter(s => s.isFaceRegistered && s.faceDescriptor && s.faceDescriptor.length > 0)
+                    .map(s => new faceapi.LabeledFaceDescriptors(s._id, [new Float32Array(s.faceDescriptor)]));
+
+                if (labeledDescriptors.length > 0) {
+                    setMatcher(new faceapi.FaceMatcher(labeledDescriptors, 0.6));
+                }
+            } catch (err) {
+                console.error("Error fetching students:", err);
+                alert("Failed to load student list.");
+            }
+        };
+        if (classCode) {
+            fetchStudents();
+        }
+    }, [classCode, api]);
 
     // Live AI Loop with Drawing
     useEffect(() => {

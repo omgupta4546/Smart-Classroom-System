@@ -10,7 +10,7 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     const api = useMemo(() => axios.create({
-        baseURL: 'http://localhost:5000/api',
+        baseURL: '/api',
         headers: { 'Content-Type': 'application/json' }
     }), []);
 
