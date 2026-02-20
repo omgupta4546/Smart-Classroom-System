@@ -21,6 +21,8 @@ const Classroom = () => {
     const [students, setStudents] = useState([]);
     const [attendanceHistory, setAttendanceHistory] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [selectedSession, setSelectedSession] = useState(null);
+    const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [newAnnouncement, setNewAnnouncement] = useState('');
     const [showAssignmentModal, setShowAssignmentModal] = useState(false);
     const [showNoteModal, setShowNoteModal] = useState(false);
@@ -84,23 +86,40 @@ const Classroom = () => {
     };
 
     const exportToCSV = () => {
-        if (attendanceHistory.length === 0) return;
+        if (attendanceHistory.length === 0 || students.length === 0) return;
+
+        // 1. Prepare Headers (Name + Date for each session)
+        const headers = ["Student Name", "Roll No", ...attendanceHistory.map(record => {
+            const date = new Date(record.date).toLocaleDateString();
+            const id = record._id ? record._id.substring(record._id.length - 4).toUpperCase() : '??';
+            return `${date} (${id})`;
+        })];
 
         let csvContent = "data:text/csv;charset=utf-8,";
-        csvContent += "Date,Session ID,Total Present,Students\n";
+        csvContent += headers.join(",") + "\n";
 
-        attendanceHistory.forEach(record => {
-            const date = new Date(record.date).toLocaleDateString();
-            const id = record._id ? record._id.substring(record._id.length - 6).toUpperCase() : 'N/A';
-            const count = record.records ? record.records.length : 0;
-            const studentNames = record.records ? record.records.map(r => r.student?.name || 'Unknown').join("; ") : '';
-            csvContent += `${date},${id},${count},"${studentNames}"\n`;
+        // 2. Prepare Rows (Each student vs each session)
+        students.forEach(student => {
+            const row = [
+                student.name || "Unknown",
+                student.rollNo || "N/A"
+            ];
+
+            // For each session, check if student was present
+            attendanceHistory.forEach(session => {
+                const isPresent = session.records.some(r =>
+                    r.student && r.student._id.toString() === student._id.toString()
+                );
+                row.push(isPresent ? "P" : "A");
+            });
+
+            csvContent += row.join(",") + "\n";
         });
 
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `Attendance_${classCode}.csv`);
+        link.setAttribute("download", `Detailed_Attendance_${classCode}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -351,7 +370,7 @@ const Classroom = () => {
                     {activeTab === 'attendance' && (
                         <div className="glass-panel" style={{ padding: '30px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-                                <h2>Attendance Logs</h2>
+                                <h2>{user?.role === 'professor' ? 'Attendance Logs' : "Today's Attendance"}</h2>
                                 <div style={{ display: 'flex', gap: '10px' }}>
                                     {user?.role === 'professor' && attendanceHistory.length > 0 && (
                                         <button onClick={exportToCSV} className="btn-glow btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem' }}>
@@ -362,7 +381,11 @@ const Classroom = () => {
                             </div>
 
                             {attendanceHistory.length === 0 ? (
-                                <p className="text-muted">No attendance sessions recorded yet.</p>
+                                <p className="text-muted">
+                                    {user?.role === 'professor'
+                                        ? 'No attendance sessions recorded yet.'
+                                        : 'No attendance recorded for today.'}
+                                </p>
                             ) : (
                                 <div style={{ overflowX: 'auto' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -370,7 +393,9 @@ const Classroom = () => {
                                             <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--accent-primary)' }}>
                                                 <th style={{ padding: '15px' }}>Date</th>
                                                 <th style={{ padding: '15px' }}>Session ID</th>
-                                                <th style={{ padding: '15px' }}>Present Count</th>
+                                                <th style={{ padding: '15px' }}>
+                                                    {user?.role === 'professor' ? 'Present Count' : 'Status'}
+                                                </th>
                                                 <th style={{ padding: '15px' }}>Action</th>
                                             </tr>
                                         </thead>
@@ -380,10 +405,26 @@ const Classroom = () => {
                                                     <td style={{ padding: '15px' }}>{new Date(record.date).toLocaleDateString()}</td>
                                                     <td style={{ padding: '15px' }}>{record._id.substring(record._id.length - 6).toUpperCase()}</td>
                                                     <td style={{ padding: '15px' }}>
-                                                        <div className="chip success">{record.records.length} Present</div>
+                                                        {user?.role === 'professor' ? (
+                                                            <div className="chip success">{record.records.length} Present</div>
+                                                        ) : (
+                                                            <div className={`chip ${record.records.length > 0 ? 'success' : 'critical'}`}>
+                                                                {record.records.length > 0 ? 'Present' : 'Absent'}
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     <td style={{ padding: '15px' }}>
-                                                        <button className="btn-glow" style={{ padding: '5px 15px', fontSize: '0.7rem' }}>DETAILS</button>
+                                                        <button
+                                                            className="btn-glow"
+                                                            style={{ padding: '5px 15px', fontSize: '0.7rem' }}
+                                                            disabled={user?.role === 'student'}
+                                                            onClick={() => {
+                                                                setSelectedSession(record);
+                                                                setShowDetailsModal(true);
+                                                            }}
+                                                        >
+                                                            DETAILS
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -395,6 +436,66 @@ const Classroom = () => {
                     )}
 
                 </div>
+
+                {/* Attendance Details Modal */}
+                {showDetailsModal && selectedSession && (
+                    <div className="flex-center fade-in" style={{
+                        position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+                        background: 'rgba(0,0,0,0.85)', zIndex: 3000, padding: '20px'
+                    }}>
+                        <div className="glass-panel" style={{
+                            padding: '40px', maxWidth: '600px', width: '100%',
+                            maxHeight: '80vh', overflowY: 'auto', position: 'relative'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+                                <div>
+                                    <h2 className="text-gradient">Session Details</h2>
+                                    <p className="text-muted">ID: {selectedSession._id.substring(selectedSession._id.length - 6).toUpperCase()}</p>
+                                </div>
+                                <button
+                                    onClick={() => setShowDetailsModal(false)}
+                                    className="btn-outline"
+                                    style={{ padding: '8px 15px' }}
+                                >
+                                    Close
+                                </button>
+                            </div>
+
+                            <div style={{ marginBottom: '20px' }}>
+                                <h3 style={{ fontSize: '1.2rem', color: 'var(--accent-primary)', marginBottom: '15px' }}>
+                                    Students Present ({selectedSession.records.length})
+                                </h3>
+                                {selectedSession.records.length === 0 ? (
+                                    <p className="text-muted">No students marked present in this session.</p>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                        {selectedSession.records.map((record, idx) => (
+                                            <div key={idx} className="glass-panel" style={{
+                                                padding: '15px', display: 'flex', justifyContent: 'space-between',
+                                                alignItems: 'center', background: 'rgba(255,255,255,0.02)'
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                                    <div style={{
+                                                        width: '35px', height: '35px', borderRadius: '50%',
+                                                        background: 'var(--accent-primary)', display: 'flex',
+                                                        alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'
+                                                    }}>
+                                                        {record.student?.name?.charAt(0).toUpperCase() || '?'}
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontWeight: '600' }}>{record.student?.name || 'Unknown Student'}</div>
+                                                        <div className="text-muted" style={{ fontSize: '0.8rem' }}>{record.student?.rollNo || 'No Roll No'}</div>
+                                                    </div>
+                                                </div>
+                                                <div className="text-muted" style={{ fontSize: '0.8rem' }}>{record.student?.email}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Assignment Modal */}
