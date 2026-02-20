@@ -74,6 +74,7 @@ ul {
 .text-gradient {
     background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
@@ -112,6 +113,11 @@ ul {
 .input-glass:focus {
     border-color: var(--accent-primary);
     box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+}
+
+.input-glass option {
+    background-color: #0f172a;
+    color: white;
 }
 
 .card {
@@ -157,5 +163,31 @@ ul {
 
     100% {
         transform: rotate(360deg);
+    }
+}
+
+.delete-hover:hover {
+    background: rgba(239, 68, 68, 0.2) !important;
+    transform: scale(1.1);
+    color: #f87171 !important;
+}
+
+.notification-item-glow {
+    box-shadow: 0 10px 40px -10px rgba(99, 102, 241, 0.3) !important;
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }

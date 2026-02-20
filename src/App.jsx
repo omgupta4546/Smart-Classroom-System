@@ -5,6 +5,8 @@ import Classroom from './pages/Classroom';
 import Attendance from './pages/Attendance';
 import AdminPanel from './pages/AdminPanel';
 import FaceRegister from './pages/FaceRegister';
+import Profile from './pages/Profile';
+import Notifications from './pages/Notifications';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 
@@ -47,6 +49,20 @@ function App() {
                     <ProtectedRoute>
                         <Layout>
                             <FaceRegister />
+                        </Layout>
+                    </ProtectedRoute>
+                } />
+                <Route path="/profile" element={
+                    <ProtectedRoute>
+                        <Layout>
+                            <Profile />
+                        </Layout>
+                    </ProtectedRoute>
+                } />
+                <Route path="/notifications" element={
+                    <ProtectedRoute>
+                        <Layout>
+                            <Notifications />
                         </Layout>
                     </ProtectedRoute>
                 } />

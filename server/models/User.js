@@ -28,6 +28,14 @@ const UserSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    universityRollNo: {
+        type: String,
+        default: ''
+    },
+    classRollNo: {
+        type: String,
+        default: ''
+    },
     faceDescriptor: {
         type: [Number], // Array of 128 floats
         default: null

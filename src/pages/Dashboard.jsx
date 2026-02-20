@@ -7,6 +7,9 @@ import { Users, Book, ShieldCheck, ShieldAlert, Plus, FolderOpen } from 'lucide-
 const Dashboard = () => {
     const { user, api } = useAuth();
     const [classes, setClasses] = useState([]);
+    const [attendanceTrend, setAttendanceTrend] = useState([]);
+    const [participationStats, setParticipationStats] = useState([]);
+    const [stats, setStats] = useState({ primaryStat: '0', avgAttendance: '0', trend: '0' });
     const [loading, setLoading] = useState(true);
     const [showJoinModal, setShowJoinModal] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -14,17 +17,25 @@ const Dashboard = () => {
     const [newClassName, setNewClassName] = useState('');
 
     useEffect(() => {
-        const fetchClasses = async () => {
+        const fetchDashboardData = async () => {
             try {
-                const res = await api.get('/classes/my');
-                setClasses(res.data);
+                const [classesRes, trendRes, participationRes, statsRes] = await Promise.all([
+                    api.get('/classes/my'),
+                    api.get('/classes/analytics/attendance'),
+                    api.get('/classes/analytics/participation'),
+                    api.get('/classes/summary')
+                ]);
+                setClasses(classesRes.data);
+                setAttendanceTrend(trendRes.data);
+                setParticipationStats(participationRes.data);
+                setStats(statsRes.data);
             } catch (err) {
-                console.error('Error fetching classes:', err);
+                console.error('Error fetching dashboard data:', err);
             } finally {
                 setLoading(false);
             }
         };
-        fetchClasses();
+        fetchDashboardData();
     }, [api]);
 
     const handleJoinClass = async (e) => {
@@ -66,7 +77,13 @@ const Dashboard = () => {
                 <h1 style={{ fontSize: '2.5rem', fontWeight: '800' }}>
                     Welcome, <span className="text-gradient">{user?.name}</span>
                 </h1>
-                <p className="text-muted">Manage your classes and attendance efficiently.</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <p className="text-muted" style={{ margin: 0 }}>Manage your classes and attendance efficiently.</p>
+                    <div style={{ width: '1px', height: '15px', background: 'var(--glass-border)' }}></div>
+                    <p style={{ margin: 0, fontWeight: '600', color: 'var(--accent-primary)', fontSize: '0.9rem' }}>
+                        {user?.institutionId?.name || 'Default University'}
+                    </p>
+                </div>
             </div>
 
             {/* Stats Overview */}
@@ -79,9 +96,11 @@ const Dashboard = () => {
                         {user?.role === 'professor' ? 'Total Students' : 'Avg Attendance'}
                     </h4>
                     <h2 style={{ fontSize: '2.5rem', margin: '10px 0' }}>
-                        {user?.role === 'professor' ? '128' : '94%'}
+                        {stats.primaryStat}
                     </h2>
-                    <div className="chip success">+5% from last week</div>
+                    <div className={`chip ${parseFloat(stats.trend) >= 0 ? 'success' : 'critical'}`}>
+                        {parseFloat(stats.trend) >= 0 ? '+' : ''}{stats.trend}% from last week
+                    </div>
                 </div>
 
                 <div className="glass-panel card" style={{ position: 'relative', overflow: 'hidden' }}>
@@ -120,10 +139,12 @@ const Dashboard = () => {
                 <AnalyticsCard
                     title={user?.role === 'professor' ? 'Daily Attendance Trend' : 'My Attendance Over Time'}
                     type="area"
+                    data={attendanceTrend}
                 />
                 <AnalyticsCard
-                    title={user?.role === 'professor' ? 'Enrollment Growth' : 'Class Engagement'}
-                    type="line"
+                    title={user?.role === 'professor' ? 'Class-wise Participation' : 'Participation by Class'}
+                    type="bar"
+                    data={participationStats}
                 />
             </div>
 

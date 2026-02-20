@@ -33,9 +33,11 @@ const adminRoutes = require('./routes/admin.js');
 const institutionRoutes = require('./routes/institution.js');
 
 app.use('/api/auth', authRoutes);
+app.use('/api/users', require('./routes/users.js'));
 app.use('/api/classes', classRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/institutions', institutionRoutes);
+app.use('/api/notifications', require('./routes/notifications.js'));
 app.use('/api/logs', require('./routes/logs.js'));
 
 if (require.main === module) {

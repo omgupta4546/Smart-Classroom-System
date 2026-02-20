@@ -3,6 +3,7 @@ const router = express.Router();
 const Class = require('../models/Class.js');
 const User = require('../models/User.js');
 const Attendance = require('../models/Attendance.js');
+const Notification = require('../models/Notification.js');
 const jwt = require('jsonwebtoken');
 const logAction = require('../utils/logger.js');
 const nodemailer = require('nodemailer');
@@ -64,6 +65,27 @@ router.post('/join', auth, async (req, res) => {
         classroom.students.push(req.user.id);
         await classroom.save();
         await logAction('JOIN_CLASS', req.user, classroom.name, { code });
+
+        // Notification for Student
+        const studentNotification = new Notification({
+            recipient: req.user.id,
+            title: 'Class Joined',
+            message: `You have successfully joined ${classroom.name}.`,
+            type: 'class',
+            link: `/classroom/${classroom.code}`
+        });
+        await studentNotification.save();
+
+        // Notification for Professor
+        const professorNotification = new Notification({
+            recipient: classroom.professor,
+            title: 'New Student Joined',
+            message: `${req.user.name} has joined your class: ${classroom.name}.`,
+            type: 'class',
+            link: `/classroom/${classroom.code}`
+        });
+        await professorNotification.save();
+
         res.json({ msg: 'Class joined' });
     } catch (err) {
         res.status(500).send('Server Error');
@@ -102,7 +124,7 @@ router.post('/face/register', auth, async (req, res) => {
 // Get Class Students (For Attendance)
 router.get('/:classCode/students', auth, async (req, res) => {
     try {
-        const classroom = await Class.findOne({ code: req.params.classCode }).populate('students', 'name faceDescriptor isFaceRegistered');
+        const classroom = await Class.findOne({ code: req.params.classCode }).populate('students', 'name faceDescriptor isFaceRegistered universityRollNo classRollNo profilePic');
         if (!classroom) return res.status(404).json({ msg: 'Class not found' });
 
         res.json(classroom.students);
@@ -156,6 +178,22 @@ router.post('/mark', auth, async (req, res) => {
         await attendance.save();
         await logAction('MARK_ATTENDANCE', req.user, classroom.name, { count: studentsPresent.length });
 
+        // Notifications for Students
+        const attendancePromises = classroom.students.map(async studentId => {
+            const isPresent = studentsPresent.includes(studentId.toString());
+            const notification = new Notification({
+                recipient: studentId,
+                title: isPresent ? 'Attendance Marked: Present' : 'Attendance Marked: Absent',
+                message: isPresent
+                    ? `You were marked Present in ${classroom.name} today.`
+                    : `You were marked Absent in ${classroom.name} today.`,
+                type: isPresent ? 'attendance' : 'absence',
+                link: `/classroom/${classroom.code}`
+            });
+            return notification.save();
+        });
+        await Promise.all(attendancePromises);
+
         // 2. Low Attendance Alerts
         // Note: In real app, calculate actual percentage. Here we simulate alert for demo.
         studentsPresent.forEach(async studentId => {
@@ -189,6 +227,283 @@ router.get('/:classCode/attendance', auth, async (req, res) => {
             .populate('records.student', 'name email rollNo')
             .sort({ date: -1 });
         res.json(history);
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   GET /api/classes/analytics/attendance
+// @desc    Get attendance analytics for last 7 days
+// @access  Private
+router.get('/analytics/attendance', auth, async (req, res) => {
+    try {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        let analytics;
+        if (req.user.role === 'professor') {
+            // Get all classes for this professor
+            const classes = await Class.find({ professor: req.user.id });
+            const classIds = classes.map(c => c._id);
+
+            analytics = await Attendance.aggregate([
+                { $match: { classId: { $in: classIds }, date: { $gte: sevenDaysAgo } } },
+                {
+                    $group: {
+                        _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+                        totalPresent: { $sum: { $size: "$records" } },
+                        totalPossible: { $sum: classes.reduce((acc, c) => acc + c.students.length, 0) / classes.length } // Simplified avg total for agg
+                    }
+                },
+                { $sort: { _id: 1 } }
+            ]);
+        } else {
+            // Student: Get sessions where they were present
+            analytics = await Attendance.aggregate([
+                { $match: { date: { $gte: sevenDaysAgo } } },
+                { $unwind: "$records" },
+                { $match: { "records.student": new mongoose.Types.ObjectId(req.user.id), "records.status": "present" } },
+                {
+                    $group: {
+                        _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+                        count: { $sum: 1 }
+                    }
+                },
+                { $sort: { _id: 1 } }
+            ]);
+        }
+
+        // Fill in missing days
+        const labels = [];
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            labels.push(date.toISOString().split('T')[0]);
+        }
+
+        const data = labels.map(label => {
+            const found = analytics.find(a => a._id === label);
+            let value = 0;
+            if (req.user.role === 'professor') {
+                const totalPossible = classes.reduce((acc, c) => acc + c.students.length, 0);
+                value = found ? Math.round((found.totalPresent / totalPossible) * 100) : 0;
+            } else {
+                value = found ? found.count : 0; // Keeping count for student trend, or can switch to % if total sessions known
+            }
+            return { name: label.split('-').slice(1).join('/'), value: value };
+        });
+
+        res.json(data);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   GET /api/classes/analytics/participation
+// @desc    Get participation rate per class
+// @access  Private
+router.get('/analytics/participation', auth, async (req, res) => {
+    try {
+        let classes;
+        if (req.user.role === 'professor') {
+            classes = await Class.find({ professor: req.user.id });
+        } else {
+            classes = await Class.find({ students: req.user.id });
+        }
+
+        const participationData = await Promise.all(classes.map(async (cls) => {
+            const totalSessions = await Attendance.countDocuments({ classId: cls._id });
+            if (totalSessions === 0) return { name: cls.name, value: 0 };
+
+            if (req.user.role === 'professor') {
+                const allAttendance = await Attendance.find({ classId: cls._id });
+                const totalPossible = allAttendance.length * cls.students.length;
+                const totalPresent = allAttendance.reduce((acc, curr) => acc + curr.records.length, 0);
+                const rate = Math.round((totalPresent / totalPossible) * 100);
+                return { name: cls.name, value: rate };
+            } else {
+                const myAttendance = await Attendance.countDocuments({
+                    classId: cls._id,
+                    "records.student": req.user.id,
+                    "records.status": "present"
+                });
+                const rate = Math.round((myAttendance / totalSessions) * 100);
+                return { name: cls.name, value: rate };
+            }
+        }));
+
+        res.json(participationData);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   GET /api/classes/summary
+// @desc    Get dashboard summary stats
+// @access  Private
+router.get('/summary', auth, async (req, res) => {
+    try {
+        const last7Days = new Date();
+        last7Days.setDate(last7Days.getDate() - 7);
+        const prev7Days = new Date();
+        prev7Days.setDate(prev7Days.getDate() - 14);
+
+        if (req.user.role === 'professor') {
+            const classes = await Class.find({ professor: req.user.id });
+            const classIds = classes.map(c => c._id);
+
+            // Total Unique Students
+            const allStudents = classes.reduce((acc, curr) => acc.concat(curr.students), []);
+            const uniqueStudentsCount = new Set(allStudents.map(s => s.toString())).size;
+
+            // Attendance Stats
+            const attendanceCurrent = await Attendance.find({ classId: { $in: classIds }, date: { $gte: last7Days } });
+            const attendancePrev = await Attendance.find({ classId: { $in: classIds }, date: { $gte: prev7Days, $lt: last7Days } });
+
+            const calcAvg = (records) => {
+                if (records.length === 0) return 0;
+                let totalPresent = 0;
+                let totalPossible = 0;
+                records.forEach(r => {
+                    totalPresent += r.records.filter(rec => rec.status === 'present').length;
+                    totalPossible += r.records.length;
+                });
+                return totalPossible === 0 ? 0 : (totalPresent / totalPossible) * 100;
+            };
+
+            const currentAvg = calcAvg(attendanceCurrent);
+            const prevAvg = calcAvg(attendancePrev);
+            const trend = prevAvg === 0 ? 0 : ((currentAvg - prevAvg) / prevAvg) * 100;
+
+            res.json({
+                primaryStat: uniqueStudentsCount,
+                avgAttendance: currentAvg.toFixed(1),
+                trend: trend.toFixed(1)
+            });
+        } else {
+            // Student
+            const classes = await Class.find({ students: req.user.id });
+            const classIds = classes.map(c => c._id);
+
+            const attendanceCurrent = await Attendance.find({ classId: { $in: classIds }, date: { $gte: last7Days } });
+            const attendancePrev = await Attendance.find({ classId: { $in: classIds }, date: { $gte: prev7Days, $lt: last7Days } });
+
+            const calcStudentAvg = (records) => {
+                const myRecords = records.filter(r => r.records.some(rec => rec.student.toString() === req.user.id));
+                if (myRecords.length === 0) return 0;
+                const presentCount = myRecords.filter(r => r.records.find(rec => rec.student.toString() === req.user.id && rec.status === 'present')).length;
+                return (presentCount / myRecords.length) * 100;
+            };
+
+            const currentAvg = calcStudentAvg(attendanceCurrent);
+            const prevAvg = calcStudentAvg(attendancePrev);
+            const trend = prevAvg === 0 ? 0 : ((currentAvg - prevAvg) / prevAvg) * 100;
+
+            res.json({
+                primaryStat: currentAvg.toFixed(1) + '%',
+                avgAttendance: currentAvg.toFixed(1),
+                trend: trend.toFixed(1)
+            });
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   POST /api/classes/:classCode/announcements
+// @desc    Add announcement to class
+// @access  Private (Professor)
+router.post('/:classCode/announcements', auth, async (req, res) => {
+    const { text } = req.body;
+    try {
+        const classroom = await Class.findOne({ code: req.params.classCode });
+        if (!classroom) return res.status(404).json({ msg: 'Class not found' });
+        if (classroom.professor.toString() !== req.user.id) return res.status(403).json({ msg: 'Not authorized' });
+
+        classroom.announcements.unshift({ text, author: req.user.id });
+        await classroom.save();
+
+        // Notify Students
+        const notificationPromises = classroom.students.map(studentId => {
+            const notification = new Notification({
+                recipient: studentId,
+                title: 'New Announcement',
+                message: `Prof. ${req.user.name} posted an update in ${classroom.name}.`,
+                type: 'update',
+                link: `/classroom/${classroom.code}`
+            });
+            return notification.save();
+        });
+        await Promise.all(notificationPromises);
+
+        res.json(classroom.announcements[0]);
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   POST /api/classes/:classCode/assignments
+// @desc    Add assignment to class
+// @access  Private (Professor)
+router.post('/:classCode/assignments', auth, async (req, res) => {
+    const { title, dueDate } = req.body;
+    try {
+        const classroom = await Class.findOne({ code: req.params.classCode });
+        if (!classroom) return res.status(404).json({ msg: 'Class not found' });
+        if (classroom.professor.toString() !== req.user.id) return res.status(403).json({ msg: 'Not authorized' });
+
+        classroom.assignments.unshift({ title, dueDate });
+        await classroom.save();
+
+        // Notify Students
+        const notificationPromises = classroom.students.map(studentId => {
+            const notification = new Notification({
+                recipient: studentId,
+                title: 'New Assignment',
+                message: `New assignment: ${title} in ${classroom.name}. Due: ${new Date(dueDate).toLocaleDateString()}`,
+                type: 'assignment',
+                link: `/classroom/${classroom.code}`
+            });
+            return notification.save();
+        });
+        await Promise.all(notificationPromises);
+
+        res.json(classroom.assignments[0]);
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   POST /api/classes/:classCode/notes
+// @desc    Add notes to class
+// @access  Private (Professor)
+router.post('/:classCode/notes', auth, async (req, res) => {
+    const { title, link } = req.body;
+    try {
+        const classroom = await Class.findOne({ code: req.params.classCode });
+        if (!classroom) return res.status(404).json({ msg: 'Class not found' });
+        if (classroom.professor.toString() !== req.user.id) return res.status(403).json({ msg: 'Not authorized' });
+
+        classroom.notes.unshift({ title, link });
+        await classroom.save();
+
+        // Notify Students
+        const notificationPromises = classroom.students.map(studentId => {
+            const notification = new Notification({
+                recipient: studentId,
+                title: 'New Study Material',
+                message: `New notes: ${title} uploaded in ${classroom.name}.`,
+                type: 'note',
+                link: `/classroom/${classroom.code}`
+            });
+            return notification.save();
+        });
+        await Promise.all(notificationPromises);
+
+        res.json(classroom.notes[0]);
     } catch (err) {
         res.status(500).send('Server Error');
     }

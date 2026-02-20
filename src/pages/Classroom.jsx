@@ -21,6 +21,13 @@ const Classroom = () => {
     const [students, setStudents] = useState([]);
     const [attendanceHistory, setAttendanceHistory] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [newAnnouncement, setNewAnnouncement] = useState('');
+    const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+    const [showNoteModal, setShowNoteModal] = useState(false);
+    const [assignmentTitle, setAssignmentTitle] = useState('');
+    const [assignmentDate, setAssignmentDate] = useState('');
+    const [noteTitle, setNoteTitle] = useState('');
+    const [noteLink, setNoteLink] = useState('');
 
     // Geo-Fencing State
     const [location, setLocation] = useState(null);
@@ -51,29 +58,30 @@ const Classroom = () => {
     };
 
     useEffect(() => {
-        const loadClassDetails = async () => {
-            try {
-                // Get Class Info
-                const classesRes = await api.get('/classes/my');
-                const currentClass = classesRes.data.find(c => c.code === classCode);
-                setClassData(currentClass);
-
-                // Get Students
-                const studentsRes = await api.get(`/classes/${classCode}/students`);
-                setStudents(studentsRes.data);
-
-                // Get Attendance History
-                const historyRes = await api.get(`/classes/${classCode}/attendance`);
-                setAttendanceHistory(historyRes.data);
-
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setLoading(false);
-            }
-        };
         loadClassDetails();
     }, [classCode, api]);
+
+    const loadClassDetails = async () => {
+        try {
+            // Get Class Info
+            const classesRes = await api.get('/classes/my');
+            const currentClass = classesRes.data.find(c => c.code === classCode);
+            setClassData(currentClass);
+
+            // Get Students
+            const studentsRes = await api.get(`/classes/${classCode}/students`);
+            setStudents(studentsRes.data);
+
+            // Get Attendance History
+            const historyRes = await api.get(`/classes/${classCode}/attendance`);
+            setAttendanceHistory(historyRes.data);
+
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const exportToCSV = () => {
         if (attendanceHistory.length === 0) return;
@@ -96,6 +104,43 @@ const Classroom = () => {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    };
+
+    const handlePostAnnouncement = async (e) => {
+        if (e.key !== 'Enter' || !newAnnouncement.trim()) return;
+        try {
+            await api.post(`/classes/${classCode}/announcements`, { text: newAnnouncement });
+            setNewAnnouncement('');
+            loadClassDetails();
+        } catch (err) {
+            console.error('Error posting announcement:', err);
+        }
+    };
+
+    const handlePostAssignment = async (e) => {
+        e.preventDefault();
+        try {
+            await api.post(`/classes/${classCode}/assignments`, { title: assignmentTitle, dueDate: assignmentDate });
+            setShowAssignmentModal(false);
+            setAssignmentTitle('');
+            setAssignmentDate('');
+            loadClassDetails();
+        } catch (err) {
+            console.error('Error posting assignment:', err);
+        }
+    };
+
+    const handlePostNote = async (e) => {
+        e.preventDefault();
+        try {
+            await api.post(`/classes/${classCode}/notes`, { title: noteTitle, link: noteLink });
+            setShowNoteModal(false);
+            setNoteTitle('');
+            setNoteLink('');
+            loadClassDetails();
+        } catch (err) {
+            console.error('Error posting note:', err);
+        }
     };
 
     if (loading) return <div className="flex-center" style={{ height: '80vh' }}><div className="loader"></div></div>;
@@ -175,36 +220,86 @@ const Classroom = () => {
                             {/* Left: Class Info Sidebar */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                                 <div className="glass-panel card">
-                                    <h4 style={{ marginBottom: '15px' }}>Upcoming</h4>
-                                    <p className="text-muted" style={{ fontSize: '0.9rem' }}>No work due soon!</p>
-                                    <Link to="#" style={{ color: 'var(--accent-primary)', fontSize: '0.8rem', marginTop: '15px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                        View all <ChevronRight size={14} />
-                                    </Link>
+                                    <h4 style={{ marginBottom: '15px' }}>Class Resources</h4>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                        {classData?.notes?.length === 0 ? (
+                                            <p className="text-muted" style={{ fontSize: '0.8rem' }}>No resources yet.</p>
+                                        ) : (
+                                            classData?.notes?.map((n, i) => (
+                                                <a key={i} href={n.link} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                    <BookOpen size={14} /> {n.title}
+                                                </a>
+                                            ))
+                                        )}
+                                    </div>
+                                    {user?.role === 'professor' && (
+                                        <button onClick={() => setShowNoteModal(true)} className="btn-glow" style={{ padding: '5px 10px', fontSize: '0.7rem', marginTop: '15px', width: '100%' }}>
+                                            + Add Material
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="glass-panel card">
+                                    <h4 style={{ marginBottom: '15px' }}>Upcoming Assignments</h4>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                        {classData?.assignments?.length === 0 ? (
+                                            <p className="text-muted" style={{ fontSize: '0.8rem' }}>No assignments yet.</p>
+                                        ) : (
+                                            classData?.assignments?.map((a, i) => (
+                                                <div key={i} style={{ fontSize: '0.85rem' }}>
+                                                    <div style={{ fontWeight: 'bold' }}>{a.title}</div>
+                                                    <div className="text-muted" style={{ fontSize: '0.7rem' }}>Due: {new Date(a.dueDate).toLocaleDateString()}</div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                    {user?.role === 'professor' && (
+                                        <button onClick={() => setShowAssignmentModal(true)} className="btn-glow" style={{ padding: '5px 10px', fontSize: '0.7rem', marginTop: '15px', width: '100%' }}>
+                                            + Add Assignment
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Right: Announcements */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                                <div className="glass-panel" style={{ padding: '20px', display: 'flex', gap: '15px', alignItems: 'center' }}>
-                                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <UserIcon size={20} color="white" />
-                                    </div>
-                                    <input type="text" className="input-glass" placeholder="Announce something to your class..." />
-                                </div>
-
-                                <div className="glass-panel card">
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-                                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                            <div style={{ width: '35px', height: '35px', borderRadius: '50%', background: 'var(--accent-secondary)' }}></div>
-                                            <div>
-                                                <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Dr. Pankaj Sharma</div>
-                                                <div className="text-muted" style={{ fontSize: '0.7rem' }}>Oct 12, 2025</div>
-                                            </div>
+                                {user?.role === 'professor' && (
+                                    <div className="glass-panel" style={{ padding: '20px', display: 'flex', gap: '15px', alignItems: 'center' }}>
+                                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <UserIcon size={20} color="white" />
                                         </div>
-                                        <MoreVertical size={16} className="text-muted" style={{ cursor: 'pointer' }} />
+                                        <input
+                                            type="text"
+                                            className="input-glass"
+                                            placeholder="Announce something to your class..."
+                                            value={newAnnouncement}
+                                            onChange={(e) => setNewAnnouncement(e.target.value)}
+                                            onKeyDown={handlePostAnnouncement}
+                                        />
                                     </div>
-                                    <p>Welcome to the {classData?.name} class! We will be using this platform for AI-based attendance throughout the semester.</p>
-                                </div>
+                                )}
+
+                                {classData?.announcements?.length === 0 ? (
+                                    <div className="glass-panel card flex-center" style={{ height: '200px' }}>
+                                        <p className="text-muted">No announcements yet.</p>
+                                    </div>
+                                ) : (
+                                    classData?.announcements?.map((ann, i) => (
+                                        <div key={i} className="glass-panel card">
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+                                                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                                    <div style={{ width: '35px', height: '35px', borderRadius: '50%', background: 'var(--accent-secondary)' }}></div>
+                                                    <div>
+                                                        <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Prof. {classData?.professorName || 'Pankaj Sharma'}</div>
+                                                        <div className="text-muted" style={{ fontSize: '0.7rem' }}>{new Date(ann.createdAt).toLocaleDateString()}</div>
+                                                    </div>
+                                                </div>
+                                                <MoreVertical size={16} className="text-muted" style={{ cursor: 'pointer' }} />
+                                            </div>
+                                            <p>{ann.text}</p>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
                     )}
@@ -228,8 +323,21 @@ const Classroom = () => {
                                 {students.map(s => (
                                     <div key={s._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', borderBottom: '1px solid var(--glass-border)' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                                            <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }}></div>
-                                            <span>{s.name}</span>
+                                            <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }} className="flex-center">
+                                                {s.profilePic ? (
+                                                    <img src={s.profilePic} alt={s.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                ) : (
+                                                    <UserIcon size={20} style={{ opacity: 0.2 }} />
+                                                )}
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ fontWeight: 'bold' }}>{s.name}</span>
+                                                <span className="text-muted" style={{ fontSize: '0.7rem' }}>
+                                                    {s.universityRollNo && `Uni Roll: ${s.universityRollNo}`}
+                                                    {s.universityRollNo && s.classRollNo && ' | '}
+                                                    {s.classRollNo && `Class Roll: ${s.classRollNo}`}
+                                                </span>
+                                            </div>
                                         </div>
                                         <div className={`chip ${s.isFaceRegistered ? 'success' : 'critical'}`}>
                                             {s.isFaceRegistered ? 'Face Registered' : 'Not Registered'}
@@ -288,6 +396,63 @@ const Classroom = () => {
 
                 </div>
             </div>
+
+            {/* Assignment Modal */}
+            {showAssignmentModal && (
+                <div className="flex-center" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 2000 }}>
+                    <form onSubmit={handlePostAssignment} className="glass-panel" style={{ width: '400px', padding: '30px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <h2 style={{ margin: 0 }}>Create Assignment</h2>
+                            <X onClick={() => setShowAssignmentModal(false)} style={{ cursor: 'pointer' }} />
+                        </div>
+                        <input
+                            className="input-glass"
+                            placeholder="Assignment Title"
+                            required
+                            value={assignmentTitle}
+                            onChange={(e) => setAssignmentTitle(e.target.value)}
+                        />
+                        <div>
+                            <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>Due Date</label>
+                            <input
+                                type="date"
+                                className="input-glass"
+                                required
+                                value={assignmentDate}
+                                onChange={(e) => setAssignmentDate(e.target.value)}
+                            />
+                        </div>
+                        <button type="submit" className="btn-glow">Post Assignment</button>
+                    </form>
+                </div>
+            )}
+
+            {/* Note Modal */}
+            {showNoteModal && (
+                <div className="flex-center" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 2000 }}>
+                    <form onSubmit={handlePostNote} className="glass-panel" style={{ width: '400px', padding: '30px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <h2 style={{ margin: 0 }}>Add Study Material</h2>
+                            <X onClick={() => setShowNoteModal(false)} style={{ cursor: 'pointer' }} />
+                        </div>
+                        <input
+                            className="input-glass"
+                            placeholder="Title (e.g. Lecture 1 Notes)"
+                            required
+                            value={noteTitle}
+                            onChange={(e) => setNoteTitle(e.target.value)}
+                        />
+                        <input
+                            className="input-glass"
+                            placeholder="Resource Link (Drive, PDF, etc)"
+                            required
+                            value={noteLink}
+                            onChange={(e) => setNoteLink(e.target.value)}
+                        />
+                        <button type="submit" className="btn-glow">Add Material</button>
+                    </form>
+                </div>
+            )}
         </div>
     );
 };
