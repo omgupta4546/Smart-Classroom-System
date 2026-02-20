@@ -28,29 +28,39 @@ const AdminPanel = () => {
     const [institutions, setInstitutions] = useState([]);
     const [newInst, setNewInst] = useState({ name: '', code: '', address: '' });
     const [newAdmin, setNewAdmin] = useState({ name: '', email: '', password: '', institutionId: '' });
+    const [userAnalytics, setUserAnalytics] = useState([]);
+    const [attendanceAnalytics, setAttendanceAnalytics] = useState([]);
 
     useEffect(() => {
         const fetchAdminData = async () => {
             console.log("Fetching Admin Data...");
             try {
                 if (user?.role === 'super_admin') {
-                    const instRes = await api.get('/api/institutions/all');
-                    setInstitutions(instRes.data);
+                    try {
+                        const res = await api.get('/institutions/all');
+                        setInstitutions(res.data);
+                    } catch (err) {
+                        console.error('Failed to fetch institutions for super admin', err);
+                    }
                     // Super admin might want to see global stats or select an institution to view
                     // For now, let's just fetch global users/classes/stats
                 }
 
-                const [statsRes, usersRes, classesRes, logsRes] = await Promise.all([
-                    api.get('/api/admin/stats'),
-                    api.get('/api/admin/users'),
-                    api.get('/api/admin/classes'),
-                    api.get('/api/logs')
+                const [statsRes, usersRes, classesRes, logsRes, userAnalyticsRes, attendanceAnalyticsRes] = await Promise.all([
+                    api.get('/admin/stats'),
+                    api.get('/admin/users'),
+                    api.get('/admin/classes'),
+                    api.get('/logs'),
+                    api.get('/admin/analytics/users'),
+                    api.get('/admin/analytics/attendance')
                 ]);
                 console.log("Admin Data Fetched:", { stats: statsRes.data, users: usersRes.data });
                 setStats(statsRes.data);
                 setUsers(usersRes.data);
                 setClasses(classesRes.data);
                 setLogs(logsRes.data);
+                setUserAnalytics(userAnalyticsRes.data);
+                setAttendanceAnalytics(attendanceAnalyticsRes.data);
             } catch (err) {
                 console.error('Failed to fetch admin data', err);
                 alert("Failed to load admin data. Check console for details.");
@@ -214,8 +224,29 @@ const AdminPanel = () => {
                                 {filteredUsers.map(user => (
                                     <tr key={user._id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
                                         <td style={{ padding: '15px' }}>
-                                            <div style={{ fontWeight: 'bold' }}>{user.name}</div>
-                                            <div className="text-muted" style={{ fontSize: '0.8rem' }}>{user.email}</div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }} className="flex-center">
+                                                    {user.profilePic ? (
+                                                        <img src={user.profilePic} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                    ) : (
+                                                        <Users size={20} style={{ opacity: 0.2 }} />
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontWeight: 'bold' }}>{user.name}</div>
+                                                    <div className="text-muted" style={{ fontSize: '0.8rem' }}>{user.email}</div>
+                                                    <div style={{ fontSize: '0.7rem', color: 'var(--accent-secondary)', fontWeight: 'bold' }}>
+                                                        {user.institutionId?.name || 'Default University'}
+                                                    </div>
+                                                    {user.role === 'student' && (
+                                                        <div className="text-muted" style={{ fontSize: '0.7rem', marginTop: '4px' }}>
+                                                            {user.universityRollNo && `Uni Roll: ${user.universityRollNo}`}
+                                                            {user.universityRollNo && user.classRollNo && ' | '}
+                                                            {user.classRollNo && `Class Roll: ${user.classRollNo}`}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </td>
                                         <td style={{ padding: '15px' }}>
                                             <div className={`chip ${user.role === 'professor' ? 'warning' : user.role === 'admin' ? 'critical' : 'success'}`}>
@@ -283,8 +314,8 @@ const AdminPanel = () => {
 
                 {activeTab === 'analytics' && (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px' }}>
-                        <AnalyticsCard title="System Growth (New Users)" type="area" />
-                        <AnalyticsCard title="Global Attendance Rate" type="line" />
+                        <AnalyticsCard title="System Growth (New Users)" type="area" data={userAnalytics} />
+                        <AnalyticsCard title="Global Attendance Rate" type="line" data={attendanceAnalytics} />
                     </div>
                 )}
 

@@ -22,13 +22,21 @@ router.post('/register', async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
+        // Default Institution Handling
+        let finalInstitutionId = institutionId;
+        if (!finalInstitutionId) {
+            const Institution = require('../models/Institution.js');
+            const defaultInst = await Institution.findOne({ code: 'DEFAULT' });
+            if (defaultInst) finalInstitutionId = defaultInst._id;
+        }
+
         user = new User({
             name,
             email,
             password: hashedPassword,
             role,
             rollNo,
-            institutionId: institutionId || null // Link to institution
+            institutionId: finalInstitutionId
         });
 
         await user.save();
@@ -76,7 +84,7 @@ router.get('/me', async (req, res) => {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const user = await User.findById(decoded.user.id).select('-password');
+        const user = await User.findById(decoded.user.id).select('-password').populate('institutionId', 'name');
         res.json(user);
     } catch (err) {
         res.status(401).json({ msg: 'Token is not valid' });

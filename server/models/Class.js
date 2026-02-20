@@ -31,7 +31,22 @@ const ClassSchema = new mongoose.Schema({
     minAttendance: {
         type: Number,
         default: 75
-    }
+    },
+    announcements: [{
+        text: String,
+        author: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        createdAt: { type: Date, default: Date.now }
+    }],
+    assignments: [{
+        title: String,
+        dueDate: Date,
+        createdAt: { type: Date, default: Date.now }
+    }],
+    notes: [{
+        title: String,
+        link: String,
+        createdAt: { type: Date, default: Date.now }
+    }]
 });
 
 module.exports = mongoose.model('Class', ClassSchema);

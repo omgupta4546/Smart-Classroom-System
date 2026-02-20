@@ -66,7 +66,7 @@ router.get('/users', isAdmin, async (req, res) => {
             // Super admin sees all, or can filter? For now sees all.
         }
 
-        const users = await User.find(query).select('-password').sort({ createdAt: -1 });
+        const users = await User.find(query).select('-password').populate('institutionId', 'name').sort({ createdAt: -1 });
         res.json(users);
     } catch (err) {
         res.status(500).send('Server Error');
@@ -93,6 +93,88 @@ router.get('/classes', isAdmin, async (req, res) => {
         const classes = await Class.find().populate('professor', 'name email').sort({ createdAt: -1 });
         res.json(classes);
     } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   GET /api/admin/analytics/users
+// @desc    Get new users per day for last 7 days
+// @access  Admin
+router.get('/analytics/users', isAdmin, async (req, res) => {
+    try {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        const analytics = await User.aggregate([
+            { $match: { createdAt: { $gte: sevenDaysAgo } } },
+            {
+                $group: {
+                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]);
+
+        // Fill in missing days
+        const labels = [];
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            labels.push(date.toISOString().split('T')[0]);
+        }
+
+        const data = labels.map(label => {
+            const found = analytics.find(a => a._id === label);
+            return { name: label.split('-').slice(1).join('/'), value: found ? found.count : 0 };
+        });
+
+        res.json(data);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   GET /api/admin/analytics/attendance
+// @desc    Get global attendance percentage per day for last 7 days
+// @access  Admin
+router.get('/analytics/attendance', isAdmin, async (req, res) => {
+    try {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        const analytics = await Attendance.aggregate([
+            { $match: { date: { $gte: sevenDaysAgo } } },
+            {
+                $group: {
+                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+                    totalPresent: { $sum: { $size: "$records" } },
+                    sessionCount: { $sum: 1 }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]);
+
+        // Note: For real percentage, we'd need total students in those classes.
+        // For a simple demo/v1, we'll show average "present students per session" or a normalized value.
+        // Let's just show total present students across all sessions that day for simplicity in this demo environment.
+
+        const labels = [];
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            labels.push(date.toISOString().split('T')[0]);
+        }
+
+        const data = labels.map(label => {
+            const found = analytics.find(a => a._id === label);
+            return { name: label.split('-').slice(1).join('/'), value: found ? found.totalPresent : 0 };
+        });
+
+        res.json(data);
+    } catch (err) {
+        console.error(err);
         res.status(500).send('Server Error');
     }
 });
