@@ -185,9 +185,35 @@ router.get('/:classCode/attendance', auth, async (req, res) => {
         const classroom = await Class.findOne({ code: req.params.classCode });
         if (!classroom) return res.status(404).json({ msg: 'Class not found' });
 
-        const history = await Attendance.find({ classId: classroom._id })
+        let query = { classId: classroom._id };
+
+        // If student, only show TODAY'S attendance sessions
+        if (req.user.role === 'student') {
+            const start = new Date();
+            start.setHours(0, 0, 0, 0);
+            const end = new Date();
+            end.setHours(23, 59, 59, 999);
+            query.date = { $gte: start, $lte: end };
+        }
+
+        let history = await Attendance.find(query)
             .populate('records.student', 'name email rollNo')
             .sort({ date: -1 });
+
+        // If student, filter records to show only THEIR OWN status
+        if (req.user.role === 'student') {
+            history = history.map(session => {
+                const studentRecord = session.records.filter(r =>
+                    r.student && r.student._id.toString() === req.user.id
+                );
+                // Return session with only this student's record
+                return {
+                    ...session.toObject(),
+                    records: studentRecord
+                };
+            });
+        }
+
         res.json(history);
     } catch (err) {
         res.status(500).send('Server Error');

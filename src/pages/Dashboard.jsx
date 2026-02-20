@@ -103,14 +103,18 @@ const Dashboard = () => {
                             <div style={{
                                 width: '12px', height: '12px',
                                 borderRadius: '50%',
-                                background: user?.isFaceRegistered ? 'var(--status-success)' : 'var(--status-critical)',
-                                boxShadow: `0 0 10px ${user?.isFaceRegistered ? 'var(--status-success)' : 'var(--status-critical)'}`
+                                background: user?.isFaceRegistered ? 'var(--status-success)' : 'var(--status-warning)',
+                                boxShadow: `0 0 10px ${user?.isFaceRegistered ? 'var(--status-success)' : 'var(--status-warning)'}`
                             }}></div>
                             <span style={{ fontWeight: 'bold' }}>{user?.isFaceRegistered ? 'Verified' : 'Action Required'}</span>
                         </div>
-                        {!user?.isFaceRegistered && (
-                            <Link to="/face-register" className="btn-glow" style={{ width: '100%', display: 'block', textAlign: 'center', padding: '10px' }}>Setup Face ID</Link>
-                        )}
+                        <Link
+                            to="/face-register"
+                            className={user?.isFaceRegistered ? "btn-secondary" : "btn-glow"}
+                            style={{ width: '100%', display: 'block', textAlign: 'center', padding: '10px' }}
+                        >
+                            {user?.isFaceRegistered ? 'Update Face ID' : 'Setup Face ID'}
+                        </Link>
                     </div>
                 )}
             </div>
