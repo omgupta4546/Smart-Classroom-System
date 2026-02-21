@@ -5,6 +5,10 @@ const ClassSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    subjectName: {
+        type: String,
+        default: ''
+    },
     code: {
         type: String,
         required: true,
