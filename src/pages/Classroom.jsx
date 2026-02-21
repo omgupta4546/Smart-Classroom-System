@@ -10,7 +10,9 @@ import {
     ChevronRight,
     MoreVertical,
     User as UserIcon,
-    Presentation
+    Presentation,
+    BookOpen,
+    X
 } from 'lucide-react';
 
 const Classroom = () => {
@@ -21,6 +23,15 @@ const Classroom = () => {
     const [students, setStudents] = useState([]);
     const [attendanceHistory, setAttendanceHistory] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [newAnnouncement, setNewAnnouncement] = useState('');
+    const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+    const [showNoteModal, setShowNoteModal] = useState(false);
+    const [assignmentTitle, setAssignmentTitle] = useState('');
+    const [assignmentDate, setAssignmentDate] = useState('');
+    const [noteTitle, setNoteTitle] = useState('');
+    const [noteLink, setNoteLink] = useState('');
+
+    // Attendance details state
     const [selectedSession, setSelectedSession] = useState(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [newAnnouncement, setNewAnnouncement] = useState('');
@@ -184,9 +195,17 @@ const Classroom = () => {
                         </p>
                     </div>
                     {user?.role === 'professor' && (
-                        <Link to={`/classroom/${classCode}/attendance`} className="btn-glow" style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Camera size={18} /> TAKE ATTENDANCE
-                        </Link>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button onClick={getLocation} className="btn-glow btn-outline" style={{ marginBottom: '10px' }}>
+                                GET LOCATION
+                            </button>
+                            <button onClick={setClassroomLocation} className="btn-glow btn-outline" style={{ marginBottom: '10px' }}>
+                                SET CLASSROOM
+                            </button>
+                            <Link to={`/classroom/${classCode}/attendance`} className="btn-glow" style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Camera size={18} /> TAKE ATTENDANCE
+                            </Link>
+                        </div>
                     )}
                 </div>
             </div>
