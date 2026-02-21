@@ -34,13 +34,6 @@ const Classroom = () => {
     // Attendance details state
     const [selectedSession, setSelectedSession] = useState(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
-    const [newAnnouncement, setNewAnnouncement] = useState('');
-    const [showAssignmentModal, setShowAssignmentModal] = useState(false);
-    const [showNoteModal, setShowNoteModal] = useState(false);
-    const [assignmentTitle, setAssignmentTitle] = useState('');
-    const [assignmentDate, setAssignmentDate] = useState('');
-    const [noteTitle, setNoteTitle] = useState('');
-    const [noteLink, setNoteLink] = useState('');
 
     // Geo-Fencing State
     const [location, setLocation] = useState(null);
