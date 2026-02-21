@@ -61,7 +61,8 @@ const FaceRegister = () => {
 
     const capture = async () => {
         setIsLoading(true);
-        const detections = await faceapi.detectSingleFace(videoRef.current, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+        // Increased confidence for better accuracy
+        const detections = await faceapi.detectSingleFace(videoRef.current, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.6 }))
             .withFaceLandmarks()
             .withFaceDescriptor();
 
@@ -75,36 +76,61 @@ const FaceRegister = () => {
                 alert('Failed to save face data.');
             }
         } else {
-            alert('No face detected. Please try again.');
+            alert('Face not detected clearly. Please ensure your face is well-lit and centered.');
         }
         setIsLoading(false);
     };
 
     return (
-        <div className="flex-center" style={{ minHeight: '100vh', flexDirection: 'column' }}>
-            <h2 className="text-gradient" style={{ marginBottom: '20px' }}>Setup Face ID</h2>
-            <div className="glass-panel" style={{ padding: '10px', borderRadius: '20px', overflow: 'hidden', position: 'relative' }}>
-                <video
-                    ref={videoRef}
-                    autoPlay
-                    muted
-                    width="640"
-                    height="480"
-                    onPlay={handleVideoPlay}
-                    style={{ borderRadius: '15px' }}
-                />
-                <canvas ref={canvasRef} style={{ position: 'absolute', top: '10px', left: '10px' }} />
-            </div>
-            <div style={{ marginTop: '20px' }}>
-                {!modelLoaded ? (
-                    <p className="text-muted">Loading AI Models...</p>
-                ) : (
-                    <button onClick={capture} disabled={isLoading} className="btn-glow">
-                        {isLoading ? 'Scanning...' : 'Capture & Save'}
+        <div className="flex-center" style={{ minHeight: '100vh', flexDirection: 'column', padding: '20px' }}>
+            <div className="glass-panel" style={{ padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '30px' }}>
+                <div style={{ textAlign: 'center' }}>
+                    <h2 className="text-gradient" style={{ marginBottom: '10px', fontSize: '2rem' }}>Face Identity Setup</h2>
+                    <p className="text-muted">Ensure your face is clearly visible in the frame.</p>
+                </div>
+
+                <div style={{
+                    position: 'relative',
+                    borderRadius: '24px',
+                    overflow: 'hidden',
+                    border: '2px solid var(--accent-primary)',
+                    boxShadow: '0 0 30px rgba(99, 102, 241, 0.2)'
+                }}>
+                    <video
+                        ref={videoRef}
+                        autoPlay
+                        muted
+                        width="640"
+                        height="480"
+                        onPlay={handleVideoPlay}
+                        style={{ display: 'block' }}
+                    />
+                    <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0 }} />
+                </div>
+
+                <div style={{ display: 'flex', gap: '15px', width: '100%', justifyContent: 'center' }}>
+                    <button
+                        onClick={() => navigate('/dashboard')}
+                        className="btn-outline"
+                    >
+                        Cancel
                     </button>
-                )}
+
+                    {!modelLoaded ? (
+                        <button disabled className="btn-glow" style={{ opacity: 0.6 }}>
+                            Loading AI...
+                        </button>
+                    ) : (
+                        <button
+                            onClick={capture}
+                            disabled={isLoading}
+                            className="btn-glow"
+                        >
+                            {isLoading ? 'Processing...' : 'Capture & Save'}
+                        </button>
+                    )}
+                </div>
             </div>
-            <button onClick={() => navigate('/dashboard')} className="btn-outline" style={{ marginTop: '20px' }}>Back</button>
         </div>
     );
 };
