@@ -130,9 +130,10 @@ router.get('/analytics/attendance', auth, async (req, res) => {
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
         let analytics;
+        let classes;
         if (req.user.role === 'professor') {
             // Get all classes for this professor
-            const classes = await Class.find({ professor: req.user.id });
+            classes = await Class.find({ professor: req.user.id });
             const classIds = classes.map(c => c._id);
 
             analytics = await Attendance.aggregate([
