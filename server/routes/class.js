@@ -121,143 +121,6 @@ router.post('/face/register', auth, async (req, res) => {
     }
 });
 
-// Get Class Students (For Attendance)
-router.get('/:classCode/students', auth, async (req, res) => {
-    try {
-        const classroom = await Class.findOne({ code: req.params.classCode }).populate('students', 'name faceDescriptor isFaceRegistered universityRollNo classRollNo profilePic');
-        if (!classroom) return res.status(404).json({ msg: 'Class not found' });
-
-        res.json(classroom.students);
-    } catch (err) {
-        res.status(500).send('Server Error');
-    }
-});
-
-
-// Mark Attendance
-router.post('/mark', auth, async (req, res) => {
-    const { classCode, studentsPresent } = req.body; // studentsPresent = [studentId1, studentId2]
-
-    try {
-        const classroom = await Class.findOne({ code: classCode });
-        if (!classroom) return res.status(404).json({ msg: 'Class not found' });
-
-        // Record for today? Or just append
-        let attendance = new Attendance({
-            classId: classroom.id,
-            records: studentsPresent.map(id => ({
-                student: id,
-                status: 'present'
-            }))
-        });
-
-        // 1. Geo-Fencing Check
-        if (req.body.location && classroom.location && classroom.location.lat) {
-            const { lat, long } = req.body.location;
-            const classLat = classroom.location.lat;
-            const classLong = classroom.location.long;
-
-            // Simple Distance Calc (Haversine Formula approximation for short distances)
-            const R = 6371e3; // metres
-            const φ1 = lat * Math.PI / 180; // φ, λ in radians
-            const φ2 = classLat * Math.PI / 180;
-            const Δφ = (classLat - lat) * Math.PI / 180;
-            const Δλ = (classLong - long) * Math.PI / 180;
-
-            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            const d = R * c; // in metres
-
-            if (d > classroom.location.radius) {
-                return res.status(400).json({ msg: `You are ${Math.round(d)}m away. Must be within ${classroom.location.radius}m.` });
-            }
-        }
-
-        await attendance.save();
-        await logAction('MARK_ATTENDANCE', req.user, classroom.name, { count: studentsPresent.length });
-
-        // Notifications for Students
-        const attendancePromises = classroom.students.map(async studentId => {
-            const isPresent = studentsPresent.includes(studentId.toString());
-            const notification = new Notification({
-                recipient: studentId,
-                title: isPresent ? 'Attendance Marked: Present' : 'Attendance Marked: Absent',
-                message: isPresent
-                    ? `You were marked Present in ${classroom.name} today.`
-                    : `You were marked Absent in ${classroom.name} today.`,
-                type: isPresent ? 'attendance' : 'absence',
-                link: `/classroom/${classroom.code}`
-            });
-            return notification.save();
-        });
-        await Promise.all(attendancePromises);
-
-        // 2. Low Attendance Alerts
-        // Note: In real app, calculate actual percentage. Here we simulate alert for demo.
-        studentsPresent.forEach(async studentId => {
-            // Mock check: 50% chance to trigger alert for demo purposes
-            if (Math.random() < 0.1) {
-                const student = await User.findById(studentId);
-                if (student && student.email) {
-                    transporter.sendMail({
-                        from: 'admin@smartclass.com',
-                        to: student.email,
-                        subject: `Low Attendance Warning: ${classroom.name}`,
-                        text: `Your attendance in ${classroom.name} has dropped below ${classroom.minAttendance}%. Please attend upcoming classes.`
-                    }).catch(err => console.error("Email failed", err));
-                }
-            }
-        });
-
-        res.json({ msg: 'Attendance marked' });
-    } catch (err) {
-        res.status(500).send('Server Error');
-    }
-});
-
-// Get Attendance History
-router.get('/:classCode/attendance', auth, async (req, res) => {
-    try {
-        const classroom = await Class.findOne({ code: req.params.classCode });
-        if (!classroom) return res.status(404).json({ msg: 'Class not found' });
-
-        let query = { classId: classroom._id };
-
-        // If student, only show TODAY'S attendance sessions
-        if (req.user.role === 'student') {
-            const start = new Date();
-            start.setHours(0, 0, 0, 0);
-            const end = new Date();
-            end.setHours(23, 59, 59, 999);
-            query.date = { $gte: start, $lte: end };
-        }
-
-        let history = await Attendance.find(query)
-            .populate('records.student', 'name email rollNo')
-            .sort({ date: -1 });
-
-        // If student, filter records to show only THEIR OWN status
-        if (req.user.role === 'student') {
-            history = history.map(session => {
-                const studentRecord = session.records.filter(r =>
-                    r.student && r.student._id.toString() === req.user.id
-                );
-                // Return session with only this student's record
-                return {
-                    ...session.toObject(),
-                    records: studentRecord
-                };
-            });
-        }
-
-        res.json(history);
-    } catch (err) {
-        res.status(500).send('Server Error');
-    }
-});
-
 // @route   GET /api/classes/analytics/attendance
 // @desc    Get attendance analytics for last 7 days
 // @access  Private
@@ -435,6 +298,143 @@ router.get('/summary', auth, async (req, res) => {
         }
     } catch (err) {
         console.error(err);
+        res.status(500).send('Server Error');
+    }
+});
+
+// Get Class Students (For Attendance)
+router.get('/:classCode/students', auth, async (req, res) => {
+    try {
+        const classroom = await Class.findOne({ code: req.params.classCode }).populate('students', 'name faceDescriptor isFaceRegistered universityRollNo classRollNo profilePic');
+        if (!classroom) return res.status(404).json({ msg: 'Class not found' });
+
+        res.json(classroom.students);
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
+
+// Mark Attendance
+router.post('/mark', auth, async (req, res) => {
+    const { classCode, studentsPresent } = req.body; // studentsPresent = [studentId1, studentId2]
+
+    try {
+        const classroom = await Class.findOne({ code: classCode });
+        if (!classroom) return res.status(404).json({ msg: 'Class not found' });
+
+        // Record for today? Or just append
+        let attendance = new Attendance({
+            classId: classroom.id,
+            records: studentsPresent.map(id => ({
+                student: id,
+                status: 'present'
+            }))
+        });
+
+        // 1. Geo-Fencing Check
+        if (req.body.location && classroom.location && classroom.location.lat) {
+            const { lat, long } = req.body.location;
+            const classLat = classroom.location.lat;
+            const classLong = classroom.location.long;
+
+            // Simple Distance Calc (Haversine Formula approximation for short distances)
+            const R = 6371e3; // metres
+            const φ1 = lat * Math.PI / 180; // φ, λ in radians
+            const φ2 = classLat * Math.PI / 180;
+            const Δφ = (classLat - lat) * Math.PI / 180;
+            const Δλ = (classLong - long) * Math.PI / 180;
+
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const d = R * c; // in metres
+
+            if (d > classroom.location.radius) {
+                return res.status(400).json({ msg: `You are ${Math.round(d)}m away. Must be within ${classroom.location.radius}m.` });
+            }
+        }
+
+        await attendance.save();
+        await logAction('MARK_ATTENDANCE', req.user, classroom.name, { count: studentsPresent.length });
+
+        // Notifications for Students
+        const attendancePromises = classroom.students.map(async studentId => {
+            const isPresent = studentsPresent.includes(studentId.toString());
+            const notification = new Notification({
+                recipient: studentId,
+                title: isPresent ? 'Attendance Marked: Present' : 'Attendance Marked: Absent',
+                message: isPresent
+                    ? `You were marked Present in ${classroom.name} today.`
+                    : `You were marked Absent in ${classroom.name} today.`,
+                type: isPresent ? 'attendance' : 'absence',
+                link: `/classroom/${classroom.code}`
+            });
+            return notification.save();
+        });
+        await Promise.all(attendancePromises);
+
+        // 2. Low Attendance Alerts
+        // Note: In real app, calculate actual percentage. Here we simulate alert for demo.
+        studentsPresent.forEach(async studentId => {
+            // Mock check: 50% chance to trigger alert for demo purposes
+            if (Math.random() < 0.1) {
+                const student = await User.findById(studentId);
+                if (student && student.email) {
+                    transporter.sendMail({
+                        from: 'admin@smartclass.com',
+                        to: student.email,
+                        subject: `Low Attendance Warning: ${classroom.name}`,
+                        text: `Your attendance in ${classroom.name} has dropped below ${classroom.minAttendance}%. Please attend upcoming classes.`
+                    }).catch(err => console.error("Email failed", err));
+                }
+            }
+        });
+
+        res.json({ msg: 'Attendance marked' });
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
+// Get Attendance History
+router.get('/:classCode/attendance', auth, async (req, res) => {
+    try {
+        const classroom = await Class.findOne({ code: req.params.classCode });
+        if (!classroom) return res.status(404).json({ msg: 'Class not found' });
+
+        let query = { classId: classroom._id };
+
+        // If student, only show TODAY'S attendance sessions
+        if (req.user.role === 'student') {
+            const start = new Date();
+            start.setHours(0, 0, 0, 0);
+            const end = new Date();
+            end.setHours(23, 59, 59, 999);
+            query.date = { $gte: start, $lte: end };
+        }
+
+        let history = await Attendance.find(query)
+            .populate('records.student', 'name email rollNo')
+            .sort({ date: -1 });
+
+        // If student, filter records to show only THEIR OWN status
+        if (req.user.role === 'student') {
+            history = history.map(session => {
+                const studentRecord = session.records.filter(r =>
+                    r.student && r.student._id.toString() === req.user.id
+                );
+                // Return session with only this student's record
+                return {
+                    ...session.toObject(),
+                    records: studentRecord
+                };
+            });
+        }
+
+        res.json(history);
+    } catch (err) {
         res.status(500).send('Server Error');
     }
 });
