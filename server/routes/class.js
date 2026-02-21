@@ -34,7 +34,7 @@ const auth = (req, res, next) => {
 // --- STATIC ANALYTICS ROUTES (Must be before parameterized routes) ---
 
 // @route   GET /api/classes/analytics/attendance
-// @desc    Get attendance analytics for last 7 days
+// @desc    Get attendance analytics for last 14 days
 // @access  Private
 router.get('/analytics/attendance', auth, async (req, res) => {
     try {
@@ -111,7 +111,7 @@ router.get('/analytics/attendance', auth, async (req, res) => {
             labels.push(date.toISOString().split('T')[0]);
         }
 
-        // --- NEW: Calculate University Average for Comparison ---
+        // Calculate University Average for Comparison
         const universityAvg = await Attendance.aggregate([
             { $match: { date: { $gte: startDate } } },
             {
@@ -140,12 +140,11 @@ router.get('/analytics/attendance', auth, async (req, res) => {
             if (req.user.role === 'professor') {
                 value = found ? Math.round((found.totalPresent / found.totalPossible) * 100) : 0;
             } else {
-                // Students: correctly use totalSessions from aggregation
                 value = found ? Math.round((found.attendedSessions / found.totalSessions) * 100) : 0;
             }
 
             const avgValue = foundUniv ? Math.round((foundUniv.totalPresent / foundUniv.totalPossible) * 100) : 0;
-            const volatility = Math.abs(value - avgValue); // Simple delta as volatility measure
+            const volatility = Math.abs(value - avgValue);
 
             return {
                 name: label.split('-').slice(1).join('/'),
@@ -196,17 +195,17 @@ router.get('/analytics/insights', auth, async (req, res) => {
                     type: 'warning',
                     title: 'At-Risk Students',
                     message: `${atRiskStudents.length} students have less than 75% attendance.`,
-                    data: atRiskStudents.slice(0, 5) // Send top 5
+                    data: atRiskStudents.slice(0, 5)
                 });
             }
 
             // 2. Best Attendance Class
             const classParticipation = await Promise.all(classes.map(async (cls) => {
                 const sessions = await Attendance.find({ classId: cls._id });
-                if (sessions.length === 0) return { name: cls.name, rate: 0 };
+                if (sessions.length === 0) return { name: cls.subjectName || cls.name, rate: 0 };
                 const totalPossible = sessions.length * cls.students.length;
                 const totalPresent = sessions.reduce((acc, curr) => acc + curr.records.length, 0);
-                return { name: cls.name, rate: (totalPresent / totalPossible) * 100 };
+                return { name: cls.subjectName || cls.name, rate: (totalPresent / totalPossible) * 100 };
             }));
 
             const bestClass = classParticipation.reduce((prev, current) => (prev.rate > current.rate) ? prev : current, { rate: -1 });
@@ -275,21 +274,15 @@ router.get('/analytics/radar', auth, async (req, res) => {
             classes = await Class.find({ students: req.user.id });
         }
 
-        const totalStudentsInUniv = await User.countDocuments({ role: 'student' });
-
         const radarData = await Promise.all(classes.map(async (cls) => {
             const sessions = await Attendance.find({ classId: cls._id });
 
-            // Metric 1: Absolute Attendance (Total Present)
             let totalPresentCount = 0;
             if (sessions.length > 0) {
                 totalPresentCount = sessions.reduce((acc, curr) => acc + curr.records.length, 0);
             }
 
-            // Metric 2: Consistency (Actual Sessions count)
             const consistency = sessions.length;
-
-            // Metric 3: Enrollment (Actual Students count)
             const enrollmentWeight = cls.students.length;
 
             return {
@@ -313,7 +306,6 @@ router.get('/analytics/radar', auth, async (req, res) => {
 router.get('/analytics/face-detection', auth, async (req, res) => {
     if (req.user.role !== 'professor') return res.status(403).json({ msg: 'Access denied' });
     try {
-        // Mock data for presentation
         const data = [
             { name: 'Recognized', value: 78, fill: '#10b981' },
             { name: 'Blurry', value: 12, fill: '#f59e0b' },
@@ -326,6 +318,9 @@ router.get('/analytics/face-detection', auth, async (req, res) => {
     }
 });
 
+// @route   GET /api/classes/analytics/participation
+// @desc    Get subject-wise attendance (attended vs total classes per subject)
+// @access  Private
 router.get('/analytics/participation', auth, async (req, res) => {
     try {
         let classes;
@@ -344,7 +339,6 @@ router.get('/analytics/participation', auth, async (req, res) => {
                 if (totalClasses === 0) return { name: label, totalClasses: 0, attended: 0, missed: 0 };
 
                 if (req.user.role === 'professor') {
-                    // Professor: total possible attendance slots vs present slots
                     const allAttendance = await Attendance.find({ classId: cls._id });
                     const totalPossible = allAttendance.length * cls.students.length;
                     const totalPresent = allAttendance.reduce((acc, curr) =>
@@ -377,7 +371,6 @@ router.get('/analytics/participation', auth, async (req, res) => {
         res.status(500).send('Server Error');
     }
 });
-
 
 // @route   GET /api/classes/summary
 // @desc    Get dashboard summary stats
@@ -435,9 +428,13 @@ router.get('/summary', auth, async (req, res) => {
             const prevCount = calcStudentStats(attendancePrev);
             const trend = currentCount - prevCount;
 
-            // Calculate overall percentage for the progress bar (Strictly using total classes happened)
+            // Calculate overall percentage for the progress bar (strictly using total classes happened)
             const totalClassHappened = await Attendance.countDocuments({ classId: { $in: classIds } });
-            const presentMySessions = await Attendance.countDocuments({ classId: { $in: classIds }, "records.student": req.user.id, "records.status": "present" });
+            const presentMySessions = await Attendance.countDocuments({
+                classId: { $in: classIds },
+                "records.student": req.user.id,
+                "records.status": "present"
+            });
             const globalRate = totalClassHappened === 0 ? 0 : Math.round((presentMySessions / totalClassHappened) * 100);
 
             // Calculate classes needed to reach 75%
@@ -532,7 +529,6 @@ router.post('/:id/leave', auth, async (req, res) => {
         const classroom = await Class.findById(req.params.id);
         if (!classroom) return res.status(404).json({ msg: 'Class not found' });
 
-        // Remove student from array
         classroom.students = classroom.students.filter(id => id.toString() !== req.user.id);
         await classroom.save();
 
@@ -555,10 +551,7 @@ router.delete('/:id', auth, async (req, res) => {
             return res.status(401).json({ msg: 'Unauthorized' });
         }
 
-        // Delete associated attendance records
         await Attendance.deleteMany({ classId: req.params.id });
-
-        // Delete the class
         await Class.findByIdAndDelete(req.params.id);
 
         await logAction('DELETE_CLASS', req.user, classroom.name);
@@ -585,7 +578,7 @@ router.get('/my', auth, async (req, res) => {
 
 // Save Face Descriptor
 router.post('/face/register', auth, async (req, res) => {
-    const { descriptor } = req.body; // Array of numbers
+    const { descriptor } = req.body;
     try {
         const user = await User.findById(req.user.id);
         user.faceDescriptor = descriptor;
@@ -609,16 +602,14 @@ router.get('/:classCode/students', auth, async (req, res) => {
     }
 });
 
-
 // Mark Attendance
 router.post('/mark', auth, async (req, res) => {
-    const { classCode, studentsPresent } = req.body; // studentsPresent = [studentId1, studentId2]
+    const { classCode, studentsPresent } = req.body;
 
     try {
         const classroom = await Class.findOne({ code: classCode });
         if (!classroom) return res.status(404).json({ msg: 'Class not found' });
 
-        // Record for today? Or just append
         let attendance = new Attendance({
             classId: classroom.id,
             records: studentsPresent.map(id => ({
@@ -627,15 +618,14 @@ router.post('/mark', auth, async (req, res) => {
             }))
         });
 
-        // 1. Geo-Fencing Check
+        // Geo-Fencing Check
         if (req.body.location && classroom.location && classroom.location.lat) {
             const { lat, long } = req.body.location;
             const classLat = classroom.location.lat;
             const classLong = classroom.location.long;
 
-            // Simple Distance Calc (Haversine Formula approximation for short distances)
-            const R = 6371e3; // metres
-            const φ1 = lat * Math.PI / 180; // φ, λ in radians
+            const R = 6371e3;
+            const φ1 = lat * Math.PI / 180;
             const φ2 = classLat * Math.PI / 180;
             const Δφ = (classLat - lat) * Math.PI / 180;
             const Δλ = (classLong - long) * Math.PI / 180;
@@ -644,7 +634,7 @@ router.post('/mark', auth, async (req, res) => {
                 Math.cos(φ1) * Math.cos(φ2) *
                 Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            const d = R * c; // in metres
+            const d = R * c;
 
             if (d > classroom.location.radius) {
                 return res.status(400).json({ msg: `You are ${Math.round(d)}m away. Must be within ${classroom.location.radius}m.` });
@@ -670,10 +660,8 @@ router.post('/mark', auth, async (req, res) => {
         });
         await Promise.all(attendancePromises);
 
-        // 2. Low Attendance Alerts
-        // Note: In real app, calculate actual percentage. Here we simulate alert for demo.
+        // Low Attendance Alerts (10% random trigger for demo)
         studentsPresent.forEach(async studentId => {
-            // Mock check: 50% chance to trigger alert for demo purposes
             if (Math.random() < 0.1) {
                 const student = await User.findById(studentId);
                 if (student && student.email) {
@@ -699,19 +687,41 @@ router.get('/:classCode/attendance', auth, async (req, res) => {
         const classroom = await Class.findOne({ code: req.params.classCode });
         if (!classroom) return res.status(404).json({ msg: 'Class not found' });
 
-        const history = await Attendance.find({ classId: classroom._id })
+        let query = { classId: classroom._id };
+
+        // If student, only show TODAY'S attendance sessions
+        if (req.user.role === 'student') {
+            const start = new Date();
+            start.setHours(0, 0, 0, 0);
+            const end = new Date();
+            end.setHours(23, 59, 59, 999);
+            query.date = { $gte: start, $lte: end };
+        }
+
+        let history = await Attendance.find(query)
             .populate('records.student', 'name email rollNo')
             .sort({ date: -1 });
+
+        // If student, filter records to show only THEIR OWN status
+        if (req.user.role === 'student') {
+            history = history.map(session => {
+                const studentRecord = session.records.filter(r =>
+                    r.student && r.student._id.toString() === req.user.id
+                );
+                return {
+                    ...session.toObject(),
+                    records: studentRecord
+                };
+            });
+        }
+
         res.json(history);
     } catch (err) {
         res.status(500).send('Server Error');
     }
 });
 
-
 // @route   POST /api/classes/:classCode/announcements
-// @desc    Add announcement to class
-// @access  Private (Professor)
 router.post('/:classCode/announcements', auth, async (req, res) => {
     const { text } = req.body;
     try {
@@ -722,7 +732,6 @@ router.post('/:classCode/announcements', auth, async (req, res) => {
         classroom.announcements.unshift({ text, author: req.user.id });
         await classroom.save();
 
-        // Notify Students
         const notificationPromises = classroom.students.map(studentId => {
             const notification = new Notification({
                 recipient: studentId,
@@ -742,8 +751,6 @@ router.post('/:classCode/announcements', auth, async (req, res) => {
 });
 
 // @route   POST /api/classes/:classCode/assignments
-// @desc    Add assignment to class
-// @access  Private (Professor)
 router.post('/:classCode/assignments', auth, async (req, res) => {
     const { title, dueDate } = req.body;
     try {
@@ -754,7 +761,6 @@ router.post('/:classCode/assignments', auth, async (req, res) => {
         classroom.assignments.unshift({ title, dueDate });
         await classroom.save();
 
-        // Notify Students
         const notificationPromises = classroom.students.map(studentId => {
             const notification = new Notification({
                 recipient: studentId,
@@ -774,8 +780,6 @@ router.post('/:classCode/assignments', auth, async (req, res) => {
 });
 
 // @route   POST /api/classes/:classCode/notes
-// @desc    Add notes to class
-// @access  Private (Professor)
 router.post('/:classCode/notes', auth, async (req, res) => {
     const { title, link } = req.body;
     try {
@@ -786,7 +790,6 @@ router.post('/:classCode/notes', auth, async (req, res) => {
         classroom.notes.unshift({ title, link });
         await classroom.save();
 
-        // Notify Students
         const notificationPromises = classroom.students.map(studentId => {
             const notification = new Notification({
                 recipient: studentId,
