@@ -1,0 +1,20 @@
+(node:14704) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/xampp/htdocs/Attendance_Website/postcss.config.js?t=1772195180075 is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to C:\xampp\htdocs\Attendance_Website\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[31m✗[39m Build failed in 520ms
+[31merror during build:
+[31m[vite]: Rollup failed to resolve import "@/components/ui/toaster" from "C:/xampp/htdocs/Attendance_Website/src/App.tsx".
+This is most likely unintended because it can break your application at runtime.
+If you do want to externalize this module explicitly add it to
+`build.rollupOptions.external`[31m
+    at viteLog (file:///C:/xampp/htdocs/Attendance_Website/node_modules/vite/dist/node/chunks/config.js:33635:57)
+    at file:///C:/xampp/htdocs/Attendance_Website/node_modules/vite/dist/node/chunks/config.js:33669:73
+    at onwarn (file:///C:/xampp/htdocs/Attendance_Website/node_modules/@vitejs/plugin-react/dist/index.js:76:7)
+    at file:///C:/xampp/htdocs/Attendance_Website/node_modules/vite/dist/node/chunks/config.js:33669:28
+    at onRollupLog (file:///C:/xampp/htdocs/Attendance_Website/node_modules/vite/dist/node/chunks/config.js:33664:63)
+    at onLog (file:///C:/xampp/htdocs/Attendance_Website/node_modules/vite/dist/node/chunks/config.js:33467:4)
+    at file:///C:/xampp/htdocs/Attendance_Website/node_modules/rollup/dist/es/shared/node-entry.js:20958:32
+    at Object.logger [as onLog] (file:///C:/xampp/htdocs/Attendance_Website/node_modules/rollup/dist/es/shared/node-entry.js:22945:9)
+    at ModuleLoader.handleInvalidResolvedId (file:///C:/xampp/htdocs/Attendance_Website/node_modules/rollup/dist/es/shared/node-entry.js:21689:26)
+    at file:///C:/xampp/htdocs/Attendance_Website/node_modules/rollup/dist/es/shared/node-entry.js:21647:26[39m

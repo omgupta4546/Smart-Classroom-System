@@ -6,17 +6,8 @@ const Attendance = require('../models/Attendance.js');
 const Notification = require('../models/Notification.js');
 const jwt = require('jsonwebtoken');
 const logAction = require('../utils/logger.js');
-const nodemailer = require('nodemailer');
+const { sendAttendanceEmail, sendClassJoinEmail } = require('../utils/email.js');
 const mongoose = require('mongoose');
-
-// Email Transporter (Configure with your SMTP)
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER || 'your-email@gmail.com',
-        pass: process.env.EMAIL_PASS || 'your-password'
-    }
-});
 
 // Middleware to check token
 const auth = (req, res, next) => {
@@ -32,6 +23,44 @@ const auth = (req, res, next) => {
 };
 
 // --- STATIC ANALYTICS ROUTES (Must be before parameterized routes) ---
+
+// @route   GET /api/classes/me/attendance-history
+// @desc    Get detailed chronological attendance history for a student
+// @access  Private
+router.get('/me/attendance-history', auth, async (req, res) => {
+    try {
+        if (req.user.role === 'professor') {
+            return res.status(403).json({ msg: 'Only students can view global history' });
+        }
+
+        const classes = await Class.find({ students: req.user.id });
+        const classIds = classes.map(c => c._id);
+        const classMap = {};
+        classes.forEach(c => {
+            classMap[c._id.toString()] = { name: c.subjectName || c.name, code: c.code };
+        });
+
+        const attendanceRecords = await Attendance.find({ classId: { $in: classIds } }).sort({ date: -1 });
+
+        const history = [];
+        attendanceRecords.forEach(session => {
+            const myRecord = session.records.find(r => r.student && r.student.toString() === req.user.id);
+            if (myRecord) {
+                history.push({
+                    date: session.date,
+                    className: classMap[session.classId.toString()].name,
+                    classCode: classMap[session.classId.toString()].code,
+                    status: myRecord.status === 'present' ? 'Present' : 'Absent'
+                });
+            }
+        });
+
+        res.json(history);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server Error');
+    }
+});
 
 // @route   GET /api/classes/analytics/attendance
 // @desc    Get attendance analytics for last 14 days
@@ -106,9 +135,9 @@ router.get('/analytics/attendance', auth, async (req, res) => {
 
         const labels = [];
         for (let i = historyDays - 1; i >= 0; i--) {
-            const date = new Date();
-            date.setDate(date.getDate() - i);
-            labels.push(date.toISOString().split('T')[0]);
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            labels.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
         }
 
         // Calculate University Average for Comparison
@@ -148,6 +177,7 @@ router.get('/analytics/attendance', auth, async (req, res) => {
 
             return {
                 name: label.split('-').slice(1).join('/'),
+                originalDate: label,
                 value: value,
                 avg: avgValue,
                 volatility: volatility
@@ -279,7 +309,10 @@ router.get('/analytics/radar', auth, async (req, res) => {
 
             let totalPresentCount = 0;
             if (sessions.length > 0) {
-                totalPresentCount = sessions.reduce((acc, curr) => acc + curr.records.length, 0);
+                sessions.forEach(session => {
+                    const presentRecords = session.records.filter(r => r.status === 'present');
+                    totalPresentCount += presentRecords.length;
+                });
             }
 
             const consistency = sessions.length;
@@ -340,11 +373,23 @@ router.get('/analytics/participation', auth, async (req, res) => {
 
                 if (req.user.role === 'professor') {
                     const allAttendance = await Attendance.find({ classId: cls._id });
+                    if (allAttendance.length === 0 || cls.students.length === 0) {
+                        return { name: label, totalClasses: totalClasses, attended: 0, missed: totalClasses };
+                    }
+
+                    let totalPresent = 0;
+                    allAttendance.forEach((session) => {
+                        totalPresent += session.records.filter(r => r.status === 'present').length;
+                    });
+
                     const totalPossible = allAttendance.length * cls.students.length;
-                    const totalPresent = allAttendance.reduce((acc, curr) =>
-                        acc + curr.records.filter(r => r.status === 'present').length, 0);
-                    const missed = totalPossible - totalPresent;
-                    return { name: label, totalClasses: totalPossible, attended: totalPresent, missed };
+
+                    return {
+                        name: label,
+                        totalClasses: totalPossible,
+                        attended: totalPresent,
+                        missed: totalPossible - totalPresent
+                    };
                 } else {
                     // Student: use $elemMatch so BOTH student and status apply to the SAME record
                     const attended = await Attendance.countDocuments({
@@ -497,7 +542,7 @@ router.post('/join', auth, async (req, res) => {
         await classroom.save();
         await logAction('JOIN_CLASS', req.user, classroom.name, { code });
 
-        // Notification for Student
+        // In-app notifications
         const studentNotification = new Notification({
             recipient: req.user.id,
             title: 'Class Joined',
@@ -507,7 +552,6 @@ router.post('/join', auth, async (req, res) => {
         });
         await studentNotification.save();
 
-        // Notification for Professor
         const professorNotification = new Notification({
             recipient: classroom.professor,
             title: 'New Student Joined',
@@ -516,6 +560,22 @@ router.post('/join', auth, async (req, res) => {
             link: `/classroom/${classroom.code}`
         });
         await professorNotification.save();
+
+        // Email notifications (fire-and-forget)
+        try {
+            const [studentUser, professorUser] = await Promise.all([
+                User.findById(req.user.id, 'name email'),
+                User.findById(classroom.professor, 'email')
+            ]);
+            sendClassJoinEmail({
+                studentEmail: studentUser.email,
+                studentName: studentUser.name,
+                professorEmail: professorUser?.email,
+                className: classroom.name
+            }).catch(e => console.error('Join email error:', e.message));
+        } catch (emailErr) {
+            console.error('Could not send join email:', emailErr.message);
+        }
 
         res.json({ msg: 'Joined successfully' });
     } catch (err) {
@@ -610,12 +670,17 @@ router.post('/mark', auth, async (req, res) => {
         const classroom = await Class.findOne({ code: classCode });
         if (!classroom) return res.status(404).json({ msg: 'Class not found' });
 
+        const presentSet = new Set((studentsPresent || []).map(id => id.toString()));
+
+        // Build a record for EVERY student in the class (present OR absent)
+        const allRecords = classroom.students.map(studentId => ({
+            student: studentId,
+            status: presentSet.has(studentId.toString()) ? 'present' : 'absent'
+        }));
+
         let attendance = new Attendance({
             classId: classroom.id,
-            records: studentsPresent.map(id => ({
-                student: id,
-                status: 'present'
-            }))
+            records: allRecords
         });
 
         // Geo-Fencing Check
@@ -646,7 +711,7 @@ router.post('/mark', auth, async (req, res) => {
 
         // Notifications for Students
         const attendancePromises = classroom.students.map(async studentId => {
-            const isPresent = studentsPresent.includes(studentId.toString());
+            const isPresent = presentSet.has(studentId.toString());
             const notification = new Notification({
                 recipient: studentId,
                 title: isPresent ? 'Attendance Marked: Present' : 'Attendance Marked: Absent',
@@ -660,26 +725,31 @@ router.post('/mark', auth, async (req, res) => {
         });
         await Promise.all(attendancePromises);
 
-        // Low Attendance Alerts (10% random trigger for demo)
-        studentsPresent.forEach(async studentId => {
-            if (Math.random() < 0.1) {
-                const student = await User.findById(studentId);
-                if (student && student.email) {
-                    transporter.sendMail({
-                        from: 'admin@smartclass.com',
-                        to: student.email,
-                        subject: `Low Attendance Warning: ${classroom.name}`,
-                        text: `Your attendance in ${classroom.name} has dropped below ${classroom.minAttendance}%. Please attend upcoming classes.`
-                    }).catch(err => console.error("Email failed", err));
-                }
-            }
+        // Email each student their attendance status (fire-and-forget)
+        const emailPromises = classroom.students.map(async studentId => {
+            try {
+                const studentUser = await User.findById(studentId, 'name email');
+                if (!studentUser?.email) return;
+                const isPresent = presentSet.has(studentId.toString());
+                const dateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                sendAttendanceEmail({
+                    to: studentUser.email,
+                    name: studentUser.name,
+                    className: classroom.name,
+                    status: isPresent ? 'present' : 'absent',
+                    date: dateStr
+                }).catch(e => console.error('Attendance email error:', e.message));
+            } catch (e) { }
         });
+        // Don't await — fire and forget so it doesn't slow the response
+        Promise.allSettled(emailPromises);
 
         res.json({ msg: 'Attendance marked' });
     } catch (err) {
         res.status(500).send('Server Error');
     }
 });
+
 
 // Get Attendance History
 router.get('/:classCode/attendance', auth, async (req, res) => {
@@ -717,6 +787,59 @@ router.get('/:classCode/attendance', auth, async (req, res) => {
 
         res.json(history);
     } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   GET /api/classes/me/attendance-history
+// @desc    Get complete attendance history for student across all classes
+// @access  Private
+router.get('/me/attendance-history', auth, async (req, res) => {
+    if (req.user.role !== 'student') return res.status(403).json({ msg: 'Access denied' });
+
+    try {
+        const studentId = new mongoose.Types.ObjectId(req.user.id);
+        const classes = await Class.find({ students: req.user.id });
+        const classIds = classes.map(c => c._id);
+
+        const history = await Attendance.aggregate([
+            { $match: { classId: { $in: classIds } } },
+            {
+                $lookup: {
+                    from: 'classes',
+                    localField: 'classId',
+                    foreignField: '_id',
+                    as: 'classInfo'
+                }
+            },
+            { $unwind: '$classInfo' },
+            {
+                $project: {
+                    date: 1,
+                    className: '$classInfo.name',
+                    classCode: '$classInfo.code',
+                    records: {
+                        $filter: {
+                            input: '$records',
+                            as: 'record',
+                            cond: { $eq: ['$$record.student', studentId] }
+                        }
+                    }
+                }
+            },
+            { $sort: { date: -1 } }
+        ]);
+
+        const formattedHistory = history.map(h => ({
+            date: h.date,
+            className: h.className,
+            classCode: h.classCode,
+            status: h.records && h.records.length > 0 && h.records[0].status === 'present' ? 'Present' : 'Absent'
+        }));
+
+        res.json(formattedHistory);
+    } catch (err) {
+        console.error("Error fetching attendance history for student", err);
         res.status(500).send('Server Error');
     }
 });

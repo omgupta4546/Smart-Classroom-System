@@ -90,7 +90,12 @@ router.delete('/user/:id', isAdmin, async (req, res) => {
 // @access  Admin
 router.get('/classes', isAdmin, async (req, res) => {
     try {
-        const classes = await Class.find().populate('professor', 'name email').sort({ createdAt: -1 });
+        let query = {};
+        if (req.user.role === 'college_admin') {
+            query.institutionId = req.user.institutionId;
+        }
+
+        const classes = await Class.find(query).populate('professor', 'name email').sort({ createdAt: -1 });
         res.json(classes);
     } catch (err) {
         res.status(500).send('Server Error');
@@ -144,12 +149,30 @@ router.get('/analytics/attendance', isAdmin, async (req, res) => {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+        let matchStage = { date: { $gte: sevenDaysAgo } };
+
+        if (req.user.role === 'college_admin') {
+            const classes = await Class.find({ institutionId: req.user.institutionId }).select('_id');
+            const classIds = classes.map(c => c._id);
+            matchStage.classId = { $in: classIds };
+        }
+
         const analytics = await Attendance.aggregate([
-            { $match: { date: { $gte: sevenDaysAgo } } },
+            { $match: matchStage },
             {
                 $group: {
                     _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
-                    totalPresent: { $sum: { $size: "$records" } },
+                    totalPresent: {
+                        $sum: {
+                            $size: {
+                                $filter: {
+                                    input: "$records",
+                                    as: "record",
+                                    cond: { $eq: ["$$record.status", "present"] }
+                                }
+                            }
+                        }
+                    },
                     sessionCount: { $sum: 1 }
                 }
             },

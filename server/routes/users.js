@@ -60,6 +60,31 @@ router.put('/profile', auth, async (req, res) => {
     }
 });
 
+// @route   PUT /api/users/password
+// @desc    Update current user's password
+// @access  Private
+router.put('/password', auth, async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    const bcrypt = require('bcryptjs');
+
+    try {
+        let user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ msg: 'User not found' });
+
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) return res.status(400).json({ msg: 'Incorrect current password' });
+
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(newPassword, salt);
+        await user.save();
+
+        res.json({ msg: 'Password updated successfully' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
 // @route   GET /api/users/:id
 // @desc    Get user profile by ID (for professors/admins)
 // @access  Private

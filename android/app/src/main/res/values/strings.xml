@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Smart Classroom</string>
+    <string name="title_activity_main">Smart Classroom</string>
+    <string name="package_name">com.smartclassroom.app</string>
+    <string name="custom_url_scheme">com.smartclassroom.app</string>
+</resources>

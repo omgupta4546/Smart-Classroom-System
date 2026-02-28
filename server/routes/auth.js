@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User.js');
 const fs = require('fs');
 const path = require('path');
+const { sendWelcomeEmail } = require('../utils/email.js');
 
 // Register
 router.post('/register', async (req, res) => {
@@ -46,6 +47,9 @@ router.post('/register', async (req, res) => {
             if (err) throw err;
             res.json({ token, user: { id: user.id, name: user.name, role: user.role, institutionId: user.institutionId } });
         });
+
+        // Send welcome email async (don't block response)
+        sendWelcomeEmail({ to: email, name, role }).catch(e => console.error('Welcome email error:', e.message));
 
     } catch (err) {
         console.error(err.message);
@@ -107,32 +111,44 @@ router.post('/google', async (req, res) => {
         let user = await User.findOne({ email });
 
         if (user) {
-            // Link Google ID if not linked
+            // Link Google ID if not already linked
             if (!user.googleId) {
                 user.googleId = sub;
                 await user.save();
             }
         } else {
-            // Create new Google user
+            // New Google user — assign default institution
+            const Institution = require('../models/Institution.js');
+            const defaultInst = await Institution.findOne({ code: 'DEFAULT' });
+
             user = new User({
                 name,
                 email,
-                password: 'google_login_no_password', // Dummy password
+                password: 'google_login_no_password', // placeholder — Google users login via token
                 googleId: sub,
-                role: 'student' // Default role
+                role: 'student', // Default role for new Google sign-ups
+                institutionId: defaultInst ? defaultInst._id : undefined
             });
             await user.save();
         }
 
-        const payload = { user: { id: user.id, role: user.role } };
+        const payload = { user: { id: user.id, role: user.role, institutionId: user.institutionId } };
         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' }, (err, jwtToken) => {
             if (err) throw err;
-            res.json({ token: jwtToken, user: { id: user.id, name: user.name, role: user.role } });
+            res.json({
+                token: jwtToken,
+                user: { id: user.id, name: user.name, role: user.role, institutionId: user.institutionId }
+            });
         });
 
+        // Send welcome email for new Google sign-ups only
+        if (!user.googleId || user.isNew) {
+            sendWelcomeEmail({ to: email, name, role: user.role }).catch(e => console.error('Google welcome email error:', e.message));
+        }
+
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Google Auth Failed');
+        console.error('Google Auth Error:', err.message);
+        res.status(500).json({ msg: 'Google authentication failed. Please try again.' });
     }
 });
 
